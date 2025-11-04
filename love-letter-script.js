@@ -295,16 +295,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
   function restoreAll(){ SLOT_REG.forEach(function(_,k){ restoreKey(k); }); }
 
-  // NEW: ensure everything is back in the header + miniheader reset
-  function restoreHeaderToFull(){
-    try { restoreAll(); } catch(_){}
-    try {
-      var bar = doc.getElementById('llc-miniheader');
-      if (bar) bar.classList.remove('is-stuck','has-sides');
-      HTML.removeAttribute('data-llc-miniheader');
-    } catch(_){}
-  }
-
   /* ---------------- Finders ---------------- */
   function findLogo(h){ if (!h) return null; var a = h.querySelector('a.w-sitelogo, .w-sitelogo a, a .w-sitelogo'); return a?(a.closest('a')||a):h.querySelector('.w-sitelogo'); }
   function findDesktopNavContainer(h){return h&&(h.querySelector('.w-nav.nav--desktop')||h.querySelector('.w-nav')); }
@@ -370,7 +360,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bgEl.style.backgroundColor = 'transparent';
   }
 
-  // New: local retry (up to ~3 frames) instead of global BG_STEAL_TRIES
+  // Local retry (up to ~3 frames) instead of global counters
   function stealAndPaintBgNow(){
     var attempts = 0;
 
@@ -382,7 +372,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
         (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
       );
 
-      // If no usable background yet, retry a couple times
       if (!ready){
         if (attempts < 3){
           win.requestAnimationFrame(doSteal);
@@ -513,7 +502,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }
   }
 
-  /* ---------------- PDP helpers (unchanged except Allergen hook) ---------------- */
+  /* ---------------- PDP helpers ---------------- */
   function hasPDP(){ return !!($('.product__wrapper') && $('.product-gallery__wrapper') && $('.product-meta__wrapper')); }
   function moveBreadcrumbs(scopeEl, galleryWrap){
     var crumbs = doc.querySelector('.w-cell.display-desktop.breadcrumb-align.row') || doc.querySelector('.breadcrumb-align.row.display-desktop') || doc.querySelector('.breadcrumb-align');
@@ -539,6 +528,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       return /description/i.test((w.textContent || '').replace(/\s+/g,' ').trim()) && w.querySelector('button');
     }) || null;
   }
+
   function buildAllergenNode(D){
     var uid  = 'llc-allergen-'+Math.random().toString(36).slice(2,9);
     var wrap = D.createElement('div');
@@ -565,8 +555,15 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     wrap.appendChild(btn); wrap.appendChild(panel); return wrap;
   }
 
+  // Global observer for allergen (works on first PDP and later route loads)
+  var allergenObserver = null;
+
   function ensureAllergen(metaWrap){
-    if (!metaWrap) return false;
+    // Allow being called with or without a specific wrapper
+    if (!metaWrap){
+      metaWrap = $('.product-meta__wrapper');
+      if (!metaWrap) return false;
+    }
 
     // If we've already placed the allergen block on this PDP, don't touch DOM again.
     if (metaWrap.hasAttribute('data-llc-allergen-ready')) return true;
@@ -574,13 +571,13 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     var group = findDescriptionGroup(metaWrap);
     if (!group || !group.parentElement) return false;
 
-    // Anchor lives right after the Description group
     var anchor = doc.getElementById('llc-allergen-anchor');
     if (!anchor){
       anchor = doc.createElement('div');
       anchor.id = 'llc-allergen-anchor';
     }
 
+    // Ensure anchor sits right after the description group
     if (group.nextSibling) {
       group.parentElement.insertBefore(anchor, group.nextSibling);
     } else {
@@ -602,32 +599,37 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
 
   function setupAllergen(metaWrap){
-    if (!metaWrap) return;
-
-    // If we can place it immediately, great – we're done.
+    // First quick attempt against whatever exists now
     if (ensureAllergen(metaWrap)) return;
 
-    // Fallback for very old browsers: light retry loop then stop.
+    // If MutationObserver is not available, fall back to a short polling retry
     if (!('MutationObserver' in win)){
       var tries = 0;
       var id = setInterval(function(){
         tries++;
-        if (ensureAllergen(metaWrap) || tries > 100){
+        if (ensureAllergen(null) || tries > 100){
           clearInterval(id);
         }
       }, 100);
       return;
     }
 
-    // Modern path: watch metaWrap until the description block appears,
-    // then place allergen once and disconnect the observer.
-    var mo = new MutationObserver(function(){
-      if (ensureAllergen(metaWrap)){
-        mo.disconnect();
+    // Already watching? Nothing to do.
+    if (allergenObserver) return;
+
+    // Watch the whole document until the PDP description exists and we can place the block.
+    allergenObserver = new MutationObserver(function(){
+      if (ensureAllergen(null)){
+        // Once we've successfully placed it, stop watching.
+        allergenObserver.disconnect();
+        allergenObserver = null;
       }
     });
 
-    mo.observe(metaWrap, { childList: true, subtree: true });
+    allergenObserver.observe(doc.body || doc.documentElement, {
+      childList: true,
+      subtree: true
+    });
   }
 
   function bootPDP(){
@@ -682,55 +684,14 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }, 900);
   }
 
-  /* ---------------- Route interceptors: restore before SPA nav ---------------- */
-  (function installRouteInterceptors(){
-    if (window.__LLC_V31__.routeInterceptorsInstalled) return;
-    window.__LLC_V31__.routeInterceptorsInstalled = true;
-
-    function preRoute(){
-      // Put nav/logo/icons/order back into the header,
-      // clear miniheader "stuck" state so next route measures correctly.
-      restoreHeaderToFull();
-    }
-
-    // History API (pushState / replaceState)
-    var _push = history.pushState, _replace = history.replaceState;
-    history.pushState = function(){
-      preRoute();
-      return _push.apply(this, arguments);
-    };
-    history.replaceState = function(){
-      preRoute();
-      return _replace.apply(this, arguments);
-    };
-
-    // Browser nav
-    win.addEventListener('popstate', preRoute, { passive:true });
-    win.addEventListener('hashchange', preRoute, { passive:true });
-
-    // In-app same-origin link clicks (capture so we run before router)
-    doc.addEventListener('click', function(e){
-      if (e.defaultPrevented) return;
-      var a = e.target && e.target.closest && e.target.closest('a[href]');
-      if (!a) return;
-      try {
-        var url = new URL(a.href, win.location.href);
-        if (url.origin !== win.location.origin) return; // external
-        if (url.href !== win.location.href) preRoute();
-      } catch(_){}
-    }, true);
-  })();
-
   /* ---------------- Route + header watcher ---------------- */
   var lastHref = '';
 
   function onRouteChange(){
     __llcBootDone = false;
 
-    // Make sure everything is back in the header
-    restoreHeaderToFull();
+    try { restoreAll(); } catch(_){}
 
-    // If we were scrolled down, jump back to top so new header can fully expand
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
       if (currentScroll > MINI_BASE_H){
