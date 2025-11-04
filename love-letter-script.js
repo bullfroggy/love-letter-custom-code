@@ -30,6 +30,14 @@
     return first;
   }
 
+  // NEW: toggle home flag on <html> so CSS can react across routes
+  function updateHomeFlag(){
+    try{
+      if (isHome()) HTML.setAttribute('data-llc-home','1');
+      else HTML.removeAttribute('data-llc-home');
+    } catch(_){}
+  }
+
   /* ---------------- Styles ---------------- */
   (function installStyles(){
     var css = `
@@ -205,8 +213,8 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
 [data-llc-scope="pdp"] .llc-accordion-button .icon svg { transform: rotate(180deg); transition: none !important; }
 [data-llc-scope="pdp"] .llc-accordion-button[aria-expanded="true"] .icon svg { transform: rotate(0deg); }
 
-/* home tweak */
-${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
+/* home tweak via html flag */
+html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 `;
     onceStyle('llc-v31-styles', css);
   })();
@@ -675,6 +683,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
     __llcBootDone = true;
 
+    // Home flag for this route
+    updateHomeFlag();
+
     // First pass: get everything wired up
     markMainHeader();
     ensureMiniGroup();
@@ -750,11 +761,14 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function onRouteChange(){
     __llcBootDone = false;
 
-    // Stop any allergen retry tied to old PDP
+    // stop any allergen retry tied to old PDP
     if (allergenRetryId) {
       clearInterval(allergenRetryId);
       allergenRetryId = null;
     }
+
+    // Update home flag for the new route
+    updateHomeFlag();
 
     // If the miniheader had actually gone "stuck", put everything back
     if (miniHeaderWasStuck()) {
@@ -788,5 +802,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   // Extra safety: once everything is loaded, try one more time to steal bg
   win.addEventListener('load', function(){
     stealAndPaintBgNow();
+    // and re-assert the home flag if needed
+    updateHomeFlag();
   });
 })();
