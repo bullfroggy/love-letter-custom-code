@@ -295,6 +295,16 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
   function restoreAll(){ SLOT_REG.forEach(function(_,k){ restoreKey(k); }); }
 
+  // NEW (from header-height fix): ensure everything is back in the header + miniheader reset
+  function restoreHeaderToFull(){
+    try { restoreAll(); } catch(_){}
+    try {
+      var bar = doc.getElementById('llc-miniheader');
+      if (bar) bar.classList.remove('is-stuck','has-sides');
+      HTML.removeAttribute('data-llc-miniheader');
+    } catch(_){}
+  }
+
   /* ---------------- Finders ---------------- */
   function findLogo(h){ if (!h) return null; var a = h.querySelector('a.w-sitelogo, .w-sitelogo a, a .w-sitelogo'); return a?(a.closest('a')||a):h.querySelector('.w-sitelogo'); }
   function findDesktopNavContainer(h){return h&&(h.querySelector('.w-nav.nav--desktop')||h.querySelector('.w-nav')); }
@@ -447,11 +457,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       if (!raf) raf = win.requestAnimationFrame(update);
     }
 
-    // 🔧 rebind: restore everything BEFORE measuring header height
     function rebind(){
-      restoreAll();
       ensureMiniGroup();
       computeCarrypad();
+      restoreAll();
       markMainHeader();
       stealAndPaintBgNow();
       update();
@@ -503,7 +512,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }
   }
 
-  /* ---------------- PDP helpers ---------------- */
+  /* ---------------- PDP helpers (unchanged except Allergen hook) ---------------- */
   function hasPDP(){ return !!($('.product__wrapper') && $('.product-gallery__wrapper') && $('.product-meta__wrapper')); }
   function moveBreadcrumbs(scopeEl, galleryWrap){
     var crumbs = doc.querySelector('.w-cell.display-desktop.breadcrumb-align.row') || doc.querySelector('.breadcrumb-align.row.display-desktop') || doc.querySelector('.breadcrumb-align');
@@ -517,9 +526,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Allergen accordion (added) ---------------- */
+  /* ---------------- Allergen accordion (added, current behavior) ---------------- */
 
-  // single retry timer so we don't stack intervals
+  // single retry timer so we don't stack intervals across PDPs
   var allergenRetryId = null;
 
   function findDescriptionGroup(metaWrap){
@@ -533,6 +542,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       return /description/i.test((w.textContent || '').replace(/\s+/g,' ').trim()) && w.querySelector('button');
     }) || null;
   }
+
   function buildAllergenNode(D){
     var uid  = 'llc-allergen-'+Math.random().toString(36).slice(2,9);
     var wrap = D.createElement('div');
@@ -664,7 +674,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bindControllers();
     initLightboxWatcher();
 
-    // PDP: keep your existing “retry until PDP DOM is ready” behavior
+    // PDP: retry until PDP DOM is ready
     var boots = 0;
     var bootTimer = setInterval(function(){
       boots++;
@@ -685,13 +695,53 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }, 900);
   }
 
+  /* ---------------- Route interceptors: restore before SPA nav ---------------- */
+  (function installRouteInterceptors(){
+    if (window.__LLC_V31__.routeInterceptorsInstalled) return;
+    window.__LLC_V31__.routeInterceptorsInstalled = true;
+
+    function preRoute(){
+      // Put nav/logo/icons/order back into the header,
+      // clear miniheader "stuck" state so next route measures correctly.
+      restoreHeaderToFull();
+    }
+
+    // History API (pushState / replaceState)
+    var _push = history.pushState, _replace = history.replaceState;
+    history.pushState = function(){
+      preRoute();
+      return _push.apply(this, arguments);
+    };
+    history.replaceState = function(){
+      preRoute();
+      return _replace.apply(this, arguments);
+    };
+
+    // Browser nav
+    win.addEventListener('popstate', preRoute, { passive:true });
+    win.addEventListener('hashchange', preRoute, { passive:true });
+
+    // In-app same-origin link clicks (capture so we run before router)
+    doc.addEventListener('click', function(e){
+      if (e.defaultPrevented) return;
+      var a = e.target && e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      try {
+        var url = new URL(a.href, win.location.href);
+        if (url.origin !== win.location.origin) return; // external
+        if (url.href !== win.location.href) preRoute();
+      } catch(_){}
+    }, true);
+  })();
+
   /* ---------------- Route + header watcher ---------------- */
   var lastHref = '';
 
   function onRouteChange(){
     __llcBootDone = false;
 
-    try { restoreAll(); } catch(_){}
+    // Make sure everything is back in the header
+    restoreHeaderToFull();
 
     // Stop any allergen retry tied to old PDP
     if (allergenRetryId) {
@@ -699,17 +749,11 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       allergenRetryId = null;
     }
 
+    // If we were scrolled down, jump back to top so new header can fully expand
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
       if (currentScroll > MINI_BASE_H){
         win.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      }
-    } catch(_){}
-
-    // 🧩 Re-apply the header/miniheader layout with nav items back in place
-    try {
-      if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function') {
-        window.__LLC_V31__.rebind();
       }
     } catch(_){}
   }
