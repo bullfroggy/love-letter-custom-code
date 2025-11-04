@@ -318,6 +318,12 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     return !!(window.__LLC_V31__ && window.__LLC_V31__.desktopStuck);
   }
 
+  // helper: is the mini bar visually "active" (used for mobile defer flag)
+  function miniBarActive(){
+    var bar = doc.getElementById('llc-miniheader');
+    return !!(bar && bar.classList.contains('is-stuck'));
+  }
+
   // ensure everything is back in the header + miniheader reset
   function restoreHeaderToFull(){
     try { restoreAll(); } catch(_){}
@@ -325,6 +331,9 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
+    } catch(_){}
+    try {
+      if (window.__LLC_V31__) window.__LLC_V31__.needsDesktopRestore = false;
     } catch(_){}
   }
 
@@ -507,9 +516,24 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     // First-time setup
     initCarrypadRobust();
 
-    mq.addEventListener && mq.addEventListener('change', rebind);
+    // MQ change: when entering desktop, apply any deferred restore first
+    function onMQChange(e){
+      if (e.matches) { // e.matches === true => now in desktop
+        if (window.__LLC_V31__ && window.__LLC_V31__.needsDesktopRestore){
+          try { restoreHeaderToFull(); } catch(_){}
+        }
+      }
+      rebind();
+    }
+    if (mq.addEventListener) mq.addEventListener('change', onMQChange);
+    else if (mq.addListener) mq.addListener(onMQChange);
+
     win.addEventListener('scroll', scroll, { passive:true });
     win.addEventListener('resize', function(){
+      // If we resized up into desktop and had a deferred restore, do it now
+      if (isDesktop() && window.__LLC_V31__ && window.__LLC_V31__.needsDesktopRestore){
+        try { restoreHeaderToFull(); } catch(_){}
+      }
       computeCarrypad();
       updateMiniHeightVar();
       stealAndPaintBgNow();
@@ -588,7 +612,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     panel.setAttribute('aria-labelledby', uid+'-header');
     panel.className = '📚19-10-1pynEn llc-accordion-panel';
     panel.style.maxHeight = '0px';
-    panel.innerHTML = '\n    <div class="w-product-description__wrapper" showsubtitle="true" positiontop="true">\n      <div class="text-component w-product-description 📚19-10-1uGevg 📚19-10-1EEwzY"\n          style="line-height:1.3; letter-spacing:0; --mobile-base-font-size:16; --mobile-font-size-scale:1.15; font-family:Larsseit; font-weight:400; color:#fff;">\n        <span>\n          <p>All truffles contain <strong>dairy</strong></p>\n          <br>\n          <div style="opacity:.9; line-height:1.5">\n            <strong>Legend</strong><br>\n            [G] = contains gluten\n            <br>\n            [P] = contains peanuts\n            <br>\n            [T] = contains tree nuts\n            <br>\n            [F] = gluten & nut free\n          </div>\n        </span>\n      </div>\n    </div>';
+    panel.innerHTML = '\n    <div class="w-product-description__wrapper" showsubtitle="true" positiontop="true">\n      <div class="text-component w-product-description 📚19-10-1uGevg 📚19-10-1EEwzY"\n          style="line-height:1.3; letter-spacing:0; --mobile-base-font-size:16; --mobile-font-size-scale:1.15; font-family:Larsseit; font-weight:400; color:#fff;">\n        <span>\n          <p>All truffles contain <strong>dairy</strong></p>\n          <br>\n          <div style="opacity:.9; line-height:1.5">\n            <strong>Legend</strong>\n            <br>\n            [G] = contains gluten\n            <br>\n            [P] = contains peanuts\n            <br>\n            [T] = contains tree nuts\n            <br>\n            [F] = gluten & nut free\n          </div>\n        </span>\n      </div>\n    </div>';
     function openPanel(){ btn.setAttribute('aria-expanded','true'); panel.style.maxHeight = panel.scrollHeight + 'px'; }
     function closePanel(){ btn.setAttribute('aria-expanded','false'); panel.style.maxHeight = panel.scrollHeight + 'px'; void panel.offsetHeight; panel.style.maxHeight = '0px'; }
     panel.addEventListener('transitionend', function(e){ if (e.propertyName !== 'max-height') return; if (btn.getAttribute('aria-expanded') === 'true') panel.style.maxHeight = 'unset'; });
@@ -731,9 +755,16 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     window.__LLC_V31__.routeInterceptorsInstalled = true;
 
     function preRoute(){
-      // Only bother restoring on DESKTOP when the desktop miniheader actually reached "stuck" state
-      if (isDesktop() && miniHeaderWasStuck()) {
-        restoreHeaderToFull();
+      if (isDesktop()) {
+        // Only bother restoring on DESKTOP when the desktop miniheader actually reached "stuck" state
+        if (miniHeaderWasStuck()) {
+          restoreHeaderToFull();
+        }
+      } else {
+        // Mobile: don't restore now; if mini bar is active, mark for restore when we enter desktop
+        if (miniBarActive()) {
+          window.__LLC_V31__.needsDesktopRestore = true;
+        }
       }
     }
 
@@ -780,9 +811,16 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     // Update home flag for the new route
     updateHomeFlag();
 
-    // If the desktop miniheader had actually gone "stuck", put everything back (DESKTOP only)
-    if (isDesktop() && miniHeaderWasStuck()) {
-      restoreHeaderToFull();
+    // Desktop: restore immediately if the miniheader had gone stuck
+    // Mobile: don't restore, just mark that when we later reach desktop we should restore then
+    if (isDesktop()) {
+      if (miniHeaderWasStuck()) {
+        restoreHeaderToFull();
+      }
+    } else {
+      if (miniBarActive()) {
+        window.__LLC_V31__.needsDesktopRestore = true;
+      }
     }
 
     // If we were scrolled down, jump back to top so new header can fully expand
