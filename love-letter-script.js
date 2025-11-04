@@ -43,8 +43,6 @@
     var css = `
 :root { --llc-gap: 12px; }
 
-.app-container{ overflow-x: hidden; }
-
 #llc-spacer{
   height: var(--llc-carrypad, 0px) !important;
   pointer-events: none !important;
