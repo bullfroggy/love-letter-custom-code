@@ -598,36 +598,59 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Route listener ---------------- */
-  var last=''; function tick(){
-    var href=(win.location&&win.location.href)||''; if(href!==last){ last=href;
-      markMainHeader();
-      setTimeout(function(){
-        bindControllers();
-        initLightboxWatcher();
-        var boots = 0, bootTimer = setInterval(function(){
-          boots++;
-          if (bootPDP() || boots > 80) clearInterval(bootTimer);
-        }, 50);
-      }, 0);
-    }}
-  if(window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
-  window.__LLC_V31__._tickId=setInterval(tick,150); tick();
+   /* ---------------- Boot + Route listener (DOM-safe) ---------------- */
 
-  /* ---------------- Initial ---------------- */
-  function __llcStart(){
+  // Boot everything once for the current page load
+  function llcBootCurrentRoute(){
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
     stealAndPaintBgNow();
     bindControllers();
-    // optional: if you want lightbox watcher active from the start:
-    // initLightboxWatcher();
+    initLightboxWatcher();
+
+    // PDP bits (retry until ready)
+    var boots = 0;
+    var bootTimer = setInterval(function(){
+      boots++;
+      if (bootPDP() || boots > 80) clearInterval(bootTimer);
+    }, 50);
   }
 
-  if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', __llcStart, { once: true });
+  // Re-run the dynamic bits on route change
+  function llcOnRouteChange(){
+    if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
+      // rebind() already does: ensureMiniGroup, computeCarrypad, restoreAll, markMainHeader,
+      // initCarrypadRobust, stealAndPaintBgNow, wiring scroll/resize, then update()
+      window.__LLC_V31__.rebind();
+    } else {
+      llcBootCurrentRoute();
+    }
+
+    // Reboot PDP on new route
+    var boots = 0;
+    var bootTimer = setInterval(function(){
+      boots++;
+      if (bootPDP() || boots > 80) clearInterval(bootTimer);
+    }, 50);
+  }
+
+  // Watch for URL changes (client-side routing)
+  var lastHref = (win.location && win.location.href) || '';
+  function tick(){
+    var href = (win.location && win.location.href) || '';
+    if (href !== lastHref){
+      lastHref = href;
+      llcOnRouteChange();
+    }
+  }
+  if (window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
+  window.__LLC_V31__._tickId = setInterval(tick, 150);
+
+  // Initial boot – wait for DOM if needed
+  if (doc.readyState === 'loading'){
+    doc.addEventListener('DOMContentLoaded', llcBootCurrentRoute, { once: true });
   } else {
-    __llcStart();
+    llcBootCurrentRoute();
   }
 })();
