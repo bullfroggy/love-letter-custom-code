@@ -30,6 +30,15 @@
     return first;
   }
 
+  // simple viewport helper (back again)
+  function isDesktop(){
+    try {
+      return !!(win.matchMedia && win.matchMedia('(min-width:840px)').matches);
+    } catch(_){
+      return (win.innerWidth || 0) >= 840;
+    }
+  }
+
   // toggle home flag on <html> so CSS can react across routes
   function updateHomeFlag(){
     try{
@@ -719,8 +728,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     window.__LLC_V31__.routeInterceptorsInstalled = true;
 
     function preRoute(){
-      // Only bother restoring if the miniheader actually reached "stuck" state
-      if (miniHeaderWasStuck()) {
+      // Only bother restoring on DESKTOP when the miniheader actually reached "stuck" state
+      if (isDesktop() && miniHeaderWasStuck()) {
         restoreHeaderToFull();
       }
     }
@@ -768,8 +777,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     // Update home flag for the new route
     updateHomeFlag();
 
-    // If the miniheader had actually gone "stuck", put everything back
-    if (miniHeaderWasStuck()) {
+    // If the miniheader had actually gone "stuck", put everything back (DESKTOP only)
+    if (isDesktop() && miniHeaderWasStuck()) {
       restoreHeaderToFull();
     }
 
