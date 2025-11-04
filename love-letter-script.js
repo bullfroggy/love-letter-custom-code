@@ -517,6 +517,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
 
   /* ---------------- Allergen accordion (added) ---------------- */
+
+  // single retry timer so we don't stack intervals
+  var allergenRetryId = null;
+
   function findDescriptionGroup(metaWrap){
     if (!metaWrap) return null;
     var btn = Array.from(metaWrap.querySelectorAll('button')).find(function(b){
@@ -528,7 +532,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       return /description/i.test((w.textContent || '').replace(/\s+/g,' ').trim()) && w.querySelector('button');
     }) || null;
   }
-
   function buildAllergenNode(D){
     var uid  = 'llc-allergen-'+Math.random().toString(36).slice(2,9);
     var wrap = D.createElement('div');
@@ -555,15 +558,8 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     wrap.appendChild(btn); wrap.appendChild(panel); return wrap;
   }
 
-  // Global observer for allergen (works on first PDP and later route loads)
-  var allergenObserver = null;
-
   function ensureAllergen(metaWrap){
-    // Allow being called with or without a specific wrapper
-    if (!metaWrap){
-      metaWrap = $('.product-meta__wrapper');
-      if (!metaWrap) return false;
-    }
+    if (!metaWrap) return false;
 
     // If we've already placed the allergen block on this PDP, don't touch DOM again.
     if (metaWrap.hasAttribute('data-llc-allergen-ready')) return true;
@@ -599,37 +595,41 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
 
   function setupAllergen(metaWrap){
-    // First quick attempt against whatever exists now
-    if (ensureAllergen(metaWrap)) return;
+    if (!metaWrap) return;
 
-    // If MutationObserver is not available, fall back to a short polling retry
-    if (!('MutationObserver' in win)){
-      var tries = 0;
-      var id = setInterval(function(){
-        tries++;
-        if (ensureAllergen(null) || tries > 100){
-          clearInterval(id);
-        }
-      }, 100);
-      return;
+    // Clear any previous retry loop (from a previous PDP)
+    if (allergenRetryId) {
+      clearInterval(allergenRetryId);
+      allergenRetryId = null;
     }
 
-    // Already watching? Nothing to do.
-    if (allergenObserver) return;
+    // Try once immediately
+    if (ensureAllergen(metaWrap)) return;
 
-    // Watch the whole document until the PDP description exists and we can place the block.
-    allergenObserver = new MutationObserver(function(){
-      if (ensureAllergen(null)){
-        // Once we've successfully placed it, stop watching.
-        allergenObserver.disconnect();
-        allergenObserver = null;
+    // Then start a light polling loop to handle slow PDP content / description load
+    var tries = 0;
+    var MAX_TRIES = 120; // 120 * 100ms = 12s
+
+    allergenRetryId = setInterval(function(){
+      tries++;
+
+      // PDP might have been torn down; stop if it's gone
+      if (!hasPDP()) {
+        if (tries > MAX_TRIES) {
+          clearInterval(allergenRetryId);
+          allergenRetryId = null;
+        }
+        return;
       }
-    });
 
-    allergenObserver.observe(doc.body || doc.documentElement, {
-      childList: true,
-      subtree: true
-    });
+      // meta wrapper might have been re-rendered; re-grab it if possible
+      var currentMeta = $('.product-meta__wrapper') || metaWrap;
+
+      if (ensureAllergen(currentMeta) || tries > MAX_TRIES) {
+        clearInterval(allergenRetryId);
+        allergenRetryId = null;
+      }
+    }, 100);
   }
 
   function bootPDP(){
@@ -663,7 +663,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bindControllers();
     initLightboxWatcher();
 
-    // PDP: retry until PDP DOM is ready
+    // PDP: keep your existing “retry until PDP DOM is ready” behavior
     var boots = 0;
     var bootTimer = setInterval(function(){
       boots++;
@@ -691,6 +691,12 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     __llcBootDone = false;
 
     try { restoreAll(); } catch(_){}
+
+    // Stop any allergen retry tied to old PDP
+    if (allergenRetryId) {
+      clearInterval(allergenRetryId);
+      allergenRetryId = null;
+    }
 
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
