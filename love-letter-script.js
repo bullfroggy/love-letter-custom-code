@@ -30,7 +30,17 @@
     return first;
   }
 
-  // NEW: toggle home flag on <html> so CSS can react across routes
+  // desktop check
+  function isDesktop(){
+    try{
+      if (win.matchMedia) return win.matchMedia('(min-width:840px)').matches;
+      return (win.innerWidth || 0) >= 840;
+    } catch(_){
+      return false;
+    }
+  }
+
+  // toggle home flag on <html> so CSS can react across routes
   function updateHomeFlag(){
     try{
       if (isHome()) HTML.setAttribute('data-llc-home','1');
@@ -576,7 +586,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     panel.setAttribute('aria-labelledby', uid+'-header');
     panel.className = '📚19-10-1pynEn llc-accordion-panel';
     panel.style.maxHeight = '0px';
-    panel.innerHTML = '\n    <div class="w-product-description__wrapper" showsubtitle="true" positiontop="true">\n      <div class="text-component w-product-description 📚19-10-1uGevg 📚19-10-1EEwzY"\n          style="line-height:1.3; letter-spacing:0; --mobile-base-font-size:16; --mobile-font-size-scale:1.15; font-family:Larsseit; font-weight:400; color:#fff;">\n        <span>\n          <p>All truffles contain <strong>dairy</strong></p>\n          <br>\n          <div style="opacity:.9; line-height:1.5">\n            <strong>Legend</strong><br>\n            [G] = contains gluten<br>\n            [P] = contains peanuts<br>\n            [T] = contains tree nuts<br>\n            [F] = gluten & nut free\n          </div>\n        </span>\n      </div>\n    </div>';
+    panel.innerHTML = '\n    <div class="w-product-description__wrapper" showsubtitle="true" positiontop="true">\n      <div class="text-component w-product-description 📚19-10-1uGevg 📚19-10-1EEwzY"\n          style="line-height:1.3; letter-spacing:0; --mobile-base-font-size:16; --mobile-font-size-scale:1.15; font-family:Larsseit; font-weight:400; color:#fff;">\n        <span>\n          <p>All truffles contain <strong>dairy</strong></p>\n          <br>\n          <div style="opacity:.9; line-height:1.5">\n            <strong>Legend</strong><br>\n            [G] = contains gluten\n            <br>\n            [P] = contains peanuts\n            <br>\n            [T] = contains tree nuts\n            <br>\n            [F] = gluten & nut free\n          </div>\n        </span>\n      </div>\n    </div>';
     function openPanel(){ btn.setAttribute('aria-expanded','true'); panel.style.maxHeight = panel.scrollHeight + 'px'; }
     function closePanel(){ btn.setAttribute('aria-expanded','false'); panel.style.maxHeight = panel.scrollHeight + 'px'; void panel.offsetHeight; panel.style.maxHeight = '0px'; }
     panel.addEventListener('transitionend', function(e){ if (e.propertyName !== 'max-height') return; if (btn.getAttribute('aria-expanded') === 'true') panel.style.maxHeight = 'unset'; });
@@ -719,7 +729,9 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     window.__LLC_V31__.routeInterceptorsInstalled = true;
 
     function preRoute(){
-      // Only bother restoring if the miniheader actually reached "stuck" state
+      // Only do the "put everything back" dance on desktop,
+      // and only if the miniheader actually reached stuck state.
+      if (!isDesktop()) return;
       if (miniHeaderWasStuck()) {
         restoreHeaderToFull();
       }
@@ -768,8 +780,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     // Update home flag for the new route
     updateHomeFlag();
 
-    // If the miniheader had actually gone "stuck", put everything back
-    if (miniHeaderWasStuck()) {
+    // Desktop only: if the miniheader had actually gone "stuck", put everything back
+    if (isDesktop() && miniHeaderWasStuck()) {
       restoreHeaderToFull();
     }
 
