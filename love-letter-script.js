@@ -574,13 +574,13 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     var group = findDescriptionGroup(metaWrap);
     if (!group || !group.parentElement) return false;
 
+    // Anchor lives right after the Description group
     var anchor = doc.getElementById('llc-allergen-anchor');
     if (!anchor){
       anchor = doc.createElement('div');
       anchor.id = 'llc-allergen-anchor';
     }
 
-    // Ensure anchor sits right after the description group
     if (group.nextSibling) {
       group.parentElement.insertBefore(anchor, group.nextSibling);
     } else {
@@ -604,23 +604,30 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function setupAllergen(metaWrap){
     if (!metaWrap) return;
 
-    // We try a few times spaced out a bit, then stop forever.
-    // This handles late-loaded PDP content without constant DOM churn.
-    function tryPlace(){
-      if (ensureAllergen(metaWrap)) {
-        // Once placed, no more attempts needed
-        return true;
-      }
-      return false;
+    // If we can place it immediately, great – we're done.
+    if (ensureAllergen(metaWrap)) return;
+
+    // Fallback for very old browsers: light retry loop then stop.
+    if (!('MutationObserver' in win)){
+      var tries = 0;
+      var id = setInterval(function(){
+        tries++;
+        if (ensureAllergen(metaWrap) || tries > 100){
+          clearInterval(id);
+        }
+      }, 100);
+      return;
     }
 
-    // First immediate attempt
-    if (tryPlace()) return;
+    // Modern path: watch metaWrap until the description block appears,
+    // then place allergen once and disconnect the observer.
+    var mo = new MutationObserver(function(){
+      if (ensureAllergen(metaWrap)){
+        mo.disconnect();
+      }
+    });
 
-    // Light retries – not loops, just a few delayed attempts
-    setTimeout(tryPlace, 150);
-    setTimeout(tryPlace, 400);
-    setTimeout(tryPlace, 900);
+    mo.observe(metaWrap, { childList: true, subtree: true });
   }
 
   function bootPDP(){
