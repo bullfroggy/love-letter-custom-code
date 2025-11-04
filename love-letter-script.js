@@ -6,25 +6,11 @@
     try { window.__LLC_V31__.rebind && window.__LLC_V31__.rebind(); } catch(_){}
     return;
   }
-  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen+step1-hide-embed' };
 
-  (function(){
-    var w = window, d = document;
-    try {
-      var p = window.parent;
-      if (p && p !== window) {
-        try {
-          var pd = p.document;
-          if (pd && (pd.querySelector('header') || pd.querySelector('.w-block-wrapper.header'))) { w = p; d = pd; }
-        } catch(_){}
-      }
-    } catch(_){}
-    window.__LLC31_WIN__ = w;
-    window.__LLC31_DOC__ = d;
-  })();
+  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen' };
 
-  var win  = window.__LLC31_WIN__ || window;
-  var doc  = window.__LLC31_DOC__ || document;
+  var win  = window;
+  var doc  = document;
   var HTML = doc.documentElement;
   var MINI_BASE_H = 57;
 
@@ -48,9 +34,6 @@
   (function installStyles(){
     var css = `
 :root { --llc-gap: 12px; }
-
-/* Step 1: hide custom code block */
-.embed-code-1 { display: none !important; }
 
 #llc-spacer{
   height: var(--llc-carrypad, 0px) !important;
@@ -598,59 +581,20 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-   /* ---------------- Boot + Route listener (DOM-safe) ---------------- */
+  /* ---------------- Route listener ---------------- */
+  var last=''; function tick(){
+    var href=(win.location&&win.location.href)||''; if(href!==last){ last=href;
+      markMainHeader();
+      setTimeout(function(){ bindControllers(); initLightboxWatcher(); }, 0);
+      var boots = 0, bootTimer = setInterval(function(){ boots++; if (bootPDP() || boots > 80) clearInterval(bootTimer); }, 50);
+    }}
+  if(window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
+  window.__LLC_V31__._tickId=setInterval(tick,150); tick();
 
-  // Boot everything once for the current page load
-  function llcBootCurrentRoute(){
-    markMainHeader();
-    ensureMiniGroup();
-    computeCarrypad();
-    stealAndPaintBgNow();
-    bindControllers();
-    initLightboxWatcher();
-
-    // PDP bits (retry until ready)
-    var boots = 0;
-    var bootTimer = setInterval(function(){
-      boots++;
-      if (bootPDP() || boots > 80) clearInterval(bootTimer);
-    }, 50);
-  }
-
-  // Re-run the dynamic bits on route change
-  function llcOnRouteChange(){
-    if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
-      // rebind() already does: ensureMiniGroup, computeCarrypad, restoreAll, markMainHeader,
-      // initCarrypadRobust, stealAndPaintBgNow, wiring scroll/resize, then update()
-      window.__LLC_V31__.rebind();
-    } else {
-      llcBootCurrentRoute();
-    }
-
-    // Reboot PDP on new route
-    var boots = 0;
-    var bootTimer = setInterval(function(){
-      boots++;
-      if (bootPDP() || boots > 80) clearInterval(bootTimer);
-    }, 50);
-  }
-
-  // Watch for URL changes (client-side routing)
-  var lastHref = (win.location && win.location.href) || '';
-  function tick(){
-    var href = (win.location && win.location.href) || '';
-    if (href !== lastHref){
-      lastHref = href;
-      llcOnRouteChange();
-    }
-  }
-  if (window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
-  window.__LLC_V31__._tickId = setInterval(tick, 150);
-
-  // Initial boot – wait for DOM if needed
-  if (doc.readyState === 'loading'){
-    doc.addEventListener('DOMContentLoaded', llcBootCurrentRoute, { once: true });
-  } else {
-    llcBootCurrentRoute();
-  }
+  /* ---------------- Initial ---------------- */
+  markMainHeader();
+  ensureMiniGroup();
+  computeCarrypad();
+  stealAndPaintBgNow();
+  bindControllers();
 })();
