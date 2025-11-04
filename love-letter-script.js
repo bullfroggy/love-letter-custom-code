@@ -303,6 +303,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function findIconsWrap(h){return h&&h.querySelector('.header__icons'); }
 
   /* ---------------- Background: capture -> apply -> clear header ---------------- */
+  var BG_STEAL_TRIES = 0;
+  var BG_STEAL_MAX_TRIES = 30; // ~30 frames
+
   function getHeaderBgElement(header){
     return (header &&
       (header.querySelector('.w-block-background.w-image-block') ||
@@ -335,21 +338,21 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function applyMiniBg(styles){
     var bar = ensureMiniBar();
     if (!styles){
-      bar.style.backgroundImage = 'none';
+      // No styles yet – don't wipe anything, just keep existing state
+      return;
+    }
+    if (styles.hasImage){
+      bar.style.backgroundImage  = styles.image;
+      bar.style.backgroundRepeat = styles.repeat;
+      bar.style.backgroundSize   = styles.size;
+      bar.style.backgroundPosition = styles.position;
     } else {
-      if (styles.hasImage){
-        bar.style.backgroundImage  = styles.image;
-        bar.style.backgroundRepeat = styles.repeat;
-        bar.style.backgroundSize   = styles.size;
-        bar.style.backgroundPosition = styles.position;
-      } else {
-        bar.style.backgroundImage = 'none';
-      }
-      if (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent'){
-        bar.style.backgroundColor = styles.color;
-      } else {
-        bar.style.removeProperty('backgroundColor');
-      }
+      bar.style.backgroundImage = 'none';
+    }
+    if (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent'){
+      bar.style.backgroundColor = styles.color;
+    } else {
+      bar.style.removeProperty('backgroundColor');
     }
   }
   function clearHeaderBg(){
@@ -361,6 +364,20 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
   function stealAndPaintBgNow(){
     var styles = captureHeaderBg();
+    var ready = styles && (
+      styles.hasImage ||
+      (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
+    );
+
+    if (!ready){
+      if (BG_STEAL_TRIES < BG_STEAL_MAX_TRIES){
+        BG_STEAL_TRIES++;
+        win.requestAnimationFrame(stealAndPaintBgNow);
+      }
+      // If we never see a usable bg, we just bail and leave header as-is.
+      return;
+    }
+
     applyMiniBg(styles);
     win.requestAnimationFrame(function(){ clearHeaderBg(); });
   }
@@ -431,6 +448,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       computeCarrypad();
       restoreAll();
       markMainHeader();
+      BG_STEAL_TRIES = 0;
       stealAndPaintBgNow();
       update();
     }
@@ -453,11 +471,13 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
+      BG_STEAL_TRIES = 0;
       stealAndPaintBgNow();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
+      BG_STEAL_TRIES = 0;
       stealAndPaintBgNow();
     }, { passive:true });
 
@@ -594,6 +614,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
+    BG_STEAL_TRIES = 0;
     stealAndPaintBgNow();
     bindControllers();
     initLightboxWatcher();
@@ -626,4 +647,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   if (window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
   window.__LLC_V31__._tickId = setInterval(tick, 150);
   tick(); // kick it once immediately
+
+  // Extra safety: once everything is loaded, try one more time to steal bg
+  win.addEventListener('load', function(){
+    BG_STEAL_TRIES = 0;
+    stealAndPaintBgNow();
+  });
 })();
