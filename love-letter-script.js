@@ -43,8 +43,7 @@
     var css = `
 :root { --llc-gap: 12px; }
 
-/* Step 1: hide custom code block */
-.embed-code-1 { display: none !important; }
+.app-container{ overflow-x: hidden; }
 
 #llc-spacer{
   height: var(--llc-carrypad, 0px) !important;
@@ -168,7 +167,6 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
 
 /* 0–599: no sticky */
 @media (max-width:599px){
-  html{ overflow-x:hidden; }
   [data-llc-scope="pdp"] .product-gallery__wrapper{ position:static; top:0; }
 }
 
