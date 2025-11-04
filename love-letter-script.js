@@ -305,7 +305,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   /* ---------------- Background: capture -> apply -> clear header ---------------- */
   var BG_STEAL_TRIES = 0;
   var BG_STEAL_MAX_TRIES = 60; // ~60 frames (~1s) per run
-  var BG_STOLEN_ONCE   = false;
+  var BG_STOLEN_ONCE   = false; // per-route
 
   function getHeaderBgElement(header){
     return (header &&
@@ -365,7 +365,8 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   // firstCall = true when we want to reset the attempt counter
   function stealAndPaintBgNow(firstCall){
-    // Once we’ve successfully stolen once, never do it again (no re-run on route change)
+    // Only one successful steal per route;
+    // on route change we reset BG_STOLEN_ONCE + BG_STEAL_TRIES.
     if (BG_STOLEN_ONCE) return;
 
     if (firstCall) BG_STEAL_TRIES = 0;
@@ -385,7 +386,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }
 
     applyMiniBg(styles);
-    BG_STOLEN_ONCE = true; // ✅ committed
+    BG_STOLEN_ONCE = true; // ✅ committed for this route
     win.requestAnimationFrame(function(){ clearHeaderBg(); });
   }
 
@@ -455,7 +456,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       computeCarrypad();
       restoreAll();
       markMainHeader();
-      // ✳️ No more stealAndPaintBgNow here – we do NOT re-steal on route change
+      // no steal here; fullBoot handles initial steal per route
       update();
     }
 
@@ -477,7 +478,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      // Only help the *first* bg steal; after that BG_STOLEN_ONCE stops this anyway
+      // can help the *current* route’s first steal if it hasn’t happened yet
       if (!BG_STOLEN_ONCE) stealAndPaintBgNow(false);
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
@@ -633,24 +634,28 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   function fullBoot(){
     if (__llcBootDone) return;
+    // Don't boot until the main header actually exists
     if (!getFirstHeader()) return;
 
     __llcBootDone = true;
 
+    // First pass: get everything wired up
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
-    // Only attempt bg steal if we haven't successfully done it yet
-    if (!BG_STOLEN_ONCE) stealAndPaintBgNow(true);
+    // Each route gets its own steal; BG_STOLEN_ONCE is per-route and reset on route change
+    stealAndPaintBgNow(true);
     bindControllers();
     initLightboxWatcher();
 
+    // PDP: retry until PDP DOM is ready
     var boots = 0;
     var bootTimer = setInterval(function(){
       boots++;
       if (bootPDP() || boots > 80) clearInterval(bootTimer);
     }, 50);
 
+    // Extra safety passes
     setTimeout(function(){
       if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
         window.__LLC_V31__.rebind();
@@ -672,7 +677,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
     try { restoreAll(); } catch(_){}
 
-    // Clear allergen "ready" flags so new PDPs can re-place it
+    // Reset allergen state so new PDPs can re-place it cleanly
     try {
       Array.prototype.forEach.call(
         doc.querySelectorAll('.product-meta__wrapper[data-llc-allergen-ready]'),
@@ -680,8 +685,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       );
     } catch(_){}
 
-    // Note: we deliberately do NOT reset BG_STOLEN_ONCE or re-run bg steal.
-    // The miniheader keeps whatever bg it stole on first page.
+    // 🔁 IMPORTANT: allow bg steal to run again on this new route
+    BG_STOLEN_ONCE = false;
+    BG_STEAL_TRIES = 0;
 
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
@@ -706,7 +712,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   window.__LLC_V31__._tickId = setInterval(tick, 150);
   tick(); // kick it once immediately
 
-  // Extra safety: once everything is loaded, try one more time to steal bg
+  // Extra safety: once everything is loaded, try one more time to steal bg (for current route)
   win.addEventListener('load', function(){
     if (!BG_STOLEN_ONCE) stealAndPaintBgNow(true);
   });
