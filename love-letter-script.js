@@ -2,7 +2,10 @@
    + Allergen Info accordion (added, no other behavior changed)
    Step 1 tweak: hide .embed-code-1 */
 (function(){
-  if (window.__LLC_V31__) { try { window.__LLC_V31__.rebind && window.__LLC_V31__.rebind(); } catch(_){} return; }
+  if (window.__LLC_V31__) {
+    try { window.__LLC_V31__.rebind && window.__LLC_V31__.rebind(); } catch(_){}
+    return;
+  }
   window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen+step1-hide-embed' };
 
   (function(){
@@ -13,9 +16,9 @@
         try {
           var pd = p.document;
           if (pd && (pd.querySelector('header') || pd.querySelector('.w-block-wrapper.header'))) { w = p; d = pd; }
-        } catch(_){ }
+        } catch(_){}
       }
-    } catch(_){ }
+    } catch(_){}
     window.__LLC31_WIN__ = w;
     window.__LLC31_DOC__ = d;
   })();
@@ -216,17 +219,6 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
 [data-llc-scope="pdp"] .llc-accordion-button .icon svg { transform: rotate(180deg); transition: none !important; }
 [data-llc-scope="pdp"] .llc-accordion-button[aria-expanded="true"] .icon svg { transform: rotate(0deg); }
 
-/* === enforce “no hamburger on desktop”, “no nav on mobile” === */
-@media (min-width: 840px){
-  header[data-llc-mainheader] .hamburger,
-  header[data-llc-mainheader] button[aria-label*="menu" i],
-  #llc-miniheader .hamburger,
-  #llc-miniheader button[aria-label*="menu" i]{ display:none !important; }
-}
-@media (max-width: 839px){
-  #llc-miniheader .w-nav, header[data-llc-mainheader] .w-nav{ display:none !important; }
-}
-
 /* home tweak */
 ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 `;
@@ -361,7 +353,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     var bar = ensureMiniBar();
     if (!styles){
       bar.style.backgroundImage = 'none';
-    }else{
+    } else {
       if (styles.hasImage){
         bar.style.backgroundImage  = styles.image;
         bar.style.backgroundRepeat = styles.repeat;
@@ -403,51 +395,91 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function stickMiniDesktop(){
     var group=ensureMiniGroup(), bar=group.bar, header=markMainHeader(); if(!header) return;
     var left=bar.querySelector('.llc-mini-left'), center=bar.querySelector('.llc-mini-center'), right=bar.querySelector('.llc-mini-right');
-    hoist('nav', findDesktopNavContainer(header), center);
-    hoist('logo', findLogo(header), left);
-    hoist('order', findOrderContainer(header), right);
-    hoist('icons', findIconsWrap(header), right);
+    hoist('nav',   findDesktopNavContainer(header), center);
+    hoist('logo',  findLogo(header),                left);
+    hoist('order', findOrderContainer(header),      right);
+    hoist('icons', findIconsWrap(header),           right);
     bar.classList.add('is-stuck','has-sides');
     updateMiniHeightVar();
   }
 
   /* ---------------- Scroll binding (threshold) ---------------- */
   function bindControllers(){
-    var mq=win.matchMedia('(min-width:840px)'), raf=0;
-    function pastThreshold(){ var header = markMainHeader(); if (!header) return false; return (header.getBoundingClientRect().bottom||0) <= MINI_BASE_H; }
+    var mq  = win.matchMedia('(min-width:840px)');
+    var raf = 0;
+
+    function pastThreshold(){
+      var header = markMainHeader();
+      if (!header) return false;
+      return (header.getBoundingClientRect().bottom || 0) <= MINI_BASE_H;
+    }
+
     function update(){
-      raf=0;
+      raf = 0;
+
       if (!mq.matches){
-        var group=ensureMiniGroup(), bar=group.bar, header=markMainHeader();
+        // Mobile: painted from the start, hoist everything (no full nav)
+        var group  = ensureMiniGroup();
+        var bar    = group.bar;
+        var header = markMainHeader();
         if (header){
-          hoist('hamburger',findHamburger(header),bar.querySelector('.llc-mini-left'));
-          hoist('logo',findLogo(header),bar.querySelector('.llc-mini-center'));
-          hoist('order',findOrderContainer(header),bar.querySelector('.llc-mini-right'));
-          hoist('icons',findIconsWrap(header),bar.querySelector('.llc-mini-right'));
+          hoist('hamburger', findHamburger(header),      bar.querySelector('.llc-mini-left'));
+          hoist('logo',      findLogo(header),           bar.querySelector('.llc-mini-center'));
+          hoist('order',     findOrderContainer(header), bar.querySelector('.llc-mini-right'));
+          hoist('icons',     findIconsWrap(header),      bar.querySelector('.llc-mini-right'));
         }
         bar.classList.add('is-stuck','has-sides');
         HTML.setAttribute('data-llc-miniheader','on');
         updateMiniHeightVar();
         return;
       }
+
+      // Desktop: only content hoisting toggles now (bg already on miniheader)
       if (pastThreshold()) stickMiniDesktop();
-      else stageMiniDesktop();
+      else                 stageMiniDesktop();
     }
-    function scroll(){ if(!raf) raf=win.requestAnimationFrame(update); }
+
+    function scroll(){
+      if (!raf) raf = win.requestAnimationFrame(update);
+    }
+
     function rebind(){
       ensureMiniGroup();
       computeCarrypad();
-      restoreAll(); markMainHeader();
-      initCarrypadRobust();
+      restoreAll();
+      markMainHeader();
       stealAndPaintBgNow();
-      win.addEventListener('scroll',scroll,{passive:true});
-      win.addEventListener('resize',scroll,{passive:true});
       update();
     }
+
+    if (!window.__LLC_V31__) window.__LLC_V31__ = {};
+    window.__LLC_V31__.rebind = rebind;
+
+    // If already bound for this document, just run per-route rebind
+    if (window.__LLC_V31__.controllersBound){
+      rebind();
+      return;
+    }
+    window.__LLC_V31__.controllersBound = true;
+
+    // First-time setup
+    initCarrypadRobust();
+
     mq.addEventListener && mq.addEventListener('change', rebind);
-    win.addEventListener('resize', function(){ computeCarrypad(); updateMiniHeightVar(); stealAndPaintBgNow(); }, {passive:true});
-    win.addEventListener('orientationchange', function(){ computeCarrypad(); updateMiniHeightVar(); stealAndPaintBgNow(); }, {passive:true});
-    rebind(); window.__LLC_V31__.rebind=rebind;
+    win.addEventListener('scroll', scroll, { passive:true });
+    win.addEventListener('resize', function(){
+      computeCarrypad();
+      updateMiniHeightVar();
+      stealAndPaintBgNow();
+    }, { passive:true });
+    win.addEventListener('orientationchange', function(){
+      computeCarrypad();
+      updateMiniHeightVar();
+      stealAndPaintBgNow();
+    }, { passive:true });
+
+    // Initial run
+    rebind();
   }
 
   /* ---------------- LIGHTBOX-only watcher ---------------- */
@@ -570,16 +602,32 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   var last=''; function tick(){
     var href=(win.location&&win.location.href)||''; if(href!==last){ last=href;
       markMainHeader();
-      setTimeout(function(){ bindControllers(); initLightboxWatcher(); }, 0);
-      var boots = 0, bootTimer = setInterval(function(){ boots++; if (bootPDP() || boots > 80) clearInterval(bootTimer); }, 50);
+      setTimeout(function(){
+        bindControllers();
+        initLightboxWatcher();
+        var boots = 0, bootTimer = setInterval(function(){
+          boots++;
+          if (bootPDP() || boots > 80) clearInterval(bootTimer);
+        }, 50);
+      }, 0);
     }}
   if(window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
   window.__LLC_V31__._tickId=setInterval(tick,150); tick();
 
   /* ---------------- Initial ---------------- */
-  markMainHeader();
-  ensureMiniGroup();
-  computeCarrypad();
-  stealAndPaintBgNow();
-  bindControllers();
+  function __llcStart(){
+    markMainHeader();
+    ensureMiniGroup();
+    computeCarrypad();
+    stealAndPaintBgNow();
+    bindControllers();
+    // optional: if you want lightbox watcher active from the start:
+    // initLightboxWatcher();
+  }
+
+  if (doc.readyState === 'loading') {
+    doc.addEventListener('DOMContentLoaded', __llcStart, { once: true });
+  } else {
+    __llcStart();
+  }
 })();
