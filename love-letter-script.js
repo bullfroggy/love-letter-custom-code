@@ -30,7 +30,7 @@
     return first;
   }
 
-  // simple viewport helper (back again)
+  // simple viewport helper
   function isDesktop(){
     try {
       return !!(win.matchMedia && win.matchMedia('(min-width:840px)').matches);
@@ -313,10 +313,9 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   }
   function restoreAll(){ SLOT_REG.forEach(function(_,k){ restoreKey(k); }); }
 
-  // helper: has miniheader actually gone into "stuck" mode (left/right hoisted)
+  // helper: has desktop miniheader actually gone into "stuck" mode (left/right hoisted)
   function miniHeaderWasStuck(){
-    var bar = doc.getElementById('llc-miniheader');
-    return !!(bar && bar.classList.contains('is-stuck'));
+    return !!(window.__LLC_V31__ && window.__LLC_V31__.desktopStuck);
   }
 
   // ensure everything is back in the header + miniheader reset
@@ -428,6 +427,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     ['logo','order','icons','hamburger'].forEach(restoreKey);
     bar.classList.remove('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
+    // desktop miniheader is not stuck in this mode
+    window.__LLC_V31__.desktopStuck = false;
     updateMiniHeightVar();
   }
   function stickMiniDesktop(){
@@ -439,6 +440,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     hoist('icons', findIconsWrap(header),           right);
     bar.classList.add('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
+    // desktop miniheader has now entered stuck mode
+    window.__LLC_V31__.desktopStuck = true;
     updateMiniHeightVar();
   }
 
@@ -484,6 +487,14 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
     function rebind(){
       ensureMiniGroup();
+
+      // NEW: if we navigated while mobile, and are now on desktop,
+      // run a one-time restore so the header can expand fully before measuring.
+      if (isDesktop() && window.__LLC_V31__ && window.__LLC_V31__.needsDesktopRestore){
+        restoreHeaderToFull();
+        window.__LLC_V31__.needsDesktopRestore = false;
+      }
+
       computeCarrypad();
       restoreAll();
       markMainHeader();
@@ -727,10 +738,20 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     if (window.__LLC_V31__.routeInterceptorsInstalled) return;
     window.__LLC_V31__.routeInterceptorsInstalled = true;
 
+    // ensure flag exists
+    window.__LLC_V31__.needsDesktopRestore = false;
+
     function preRoute(){
-      // Only bother restoring on DESKTOP when the miniheader actually reached "stuck" state
-      if (isDesktop() && miniHeaderWasStuck()) {
-        restoreHeaderToFull();
+      // DESKTOP: restore immediately if miniheader had actually stuck
+      if (isDesktop()) {
+        if (miniHeaderWasStuck()) {
+          restoreHeaderToFull();
+          window.__LLC_V31__.needsDesktopRestore = false;
+        }
+      } else {
+        // MOBILE: don't restore now (keeps miniheader content),
+        // but remember that the next time we hit desktop we should restore once.
+        window.__LLC_V31__.needsDesktopRestore = true;
       }
     }
 
@@ -777,9 +798,13 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     // Update home flag for the new route
     updateHomeFlag();
 
-    // If the miniheader had actually gone "stuck", put everything back (DESKTOP only)
+    // DESKTOP: if miniheader was stuck, restore immediately
     if (isDesktop() && miniHeaderWasStuck()) {
       restoreHeaderToFull();
+      if (window.__LLC_V31__) window.__LLC_V31__.needsDesktopRestore = false;
+    } else if (!isDesktop()) {
+      // MOBILE: mark that when we next become desktop, we should do a one-time restore
+      if (window.__LLC_V31__) window.__LLC_V31__.needsDesktopRestore = true;
     }
 
     // If we were scrolled down, jump back to top so new header can fully expand
