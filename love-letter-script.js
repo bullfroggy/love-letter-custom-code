@@ -303,6 +303,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function findIconsWrap(h){return h&&h.querySelector('.header__icons'); }
 
   /* ---------------- Background: capture -> apply -> clear header ---------------- */
+  var BG_STEAL_TRIES = 0;
+  var BG_STEAL_MAX_TRIES = 60; // ~60 frames (~1s) per run
+
   function getHeaderBgElement(header){
     return (header &&
       (header.querySelector('.w-block-background.w-image-block') ||
@@ -360,31 +363,27 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bgEl.style.backgroundColor = 'transparent';
   }
 
-  // New: local retry (up to ~3 frames) instead of global BG_STEAL_TRIES
-  function stealAndPaintBgNow(){
-    var attempts = 0;
+  // firstCall = true when we want to reset the attempt counter
+  function stealAndPaintBgNow(firstCall){
+    if (firstCall) BG_STEAL_TRIES = 0;
 
-    function doSteal(){
-      attempts++;
-      var styles = captureHeaderBg();
-      var ready = styles && (
-        styles.hasImage ||
-        (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
-      );
+    var styles = captureHeaderBg();
+    var ready = styles && (
+      styles.hasImage ||
+      (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
+    );
 
-      // If no usable background yet, retry a couple times
-      if (!ready){
-        if (attempts < 3){
-          win.requestAnimationFrame(doSteal);
-        }
-        return;
+    if (!ready){
+      if (BG_STEAL_TRIES < BG_STEAL_MAX_TRIES){
+        BG_STEAL_TRIES++;
+        win.requestAnimationFrame(function(){ stealAndPaintBgNow(false); });
       }
-
-      applyMiniBg(styles);
-      win.requestAnimationFrame(function(){ clearHeaderBg(); });
+      // If we never see a usable bg, we just bail and leave header as-is.
+      return;
     }
 
-    doSteal();
+    applyMiniBg(styles);
+    win.requestAnimationFrame(function(){ clearHeaderBg(); });
   }
 
   /* ---------------- Desktop staged/stuck (content hoisting only) ---------------- */
@@ -453,7 +452,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       computeCarrypad();
       restoreAll();
       markMainHeader();
-      stealAndPaintBgNow();
+      stealAndPaintBgNow(true);
       update();
     }
 
@@ -475,12 +474,12 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      stealAndPaintBgNow();
+      stealAndPaintBgNow(true);
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      stealAndPaintBgNow();
+      stealAndPaintBgNow(true);
     }, { passive:true });
 
     // Initial run
@@ -594,23 +593,22 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function setupAllergen(metaWrap){
     if (!metaWrap) return;
 
-    // We try a few times spaced out a bit, then stop forever.
-    // This handles late-loaded PDP content without constant DOM churn.
-    function tryPlace(){
-      if (ensureAllergen(metaWrap)) {
-        // Once placed, no more attempts needed
-        return true;
+    // Try immediately
+    if (ensureAllergen(metaWrap)) return;
+
+    // If description/meta loads later, watch for it – but stop once placed
+    var mo = new MutationObserver(function(){
+      if (ensureAllergen(metaWrap)){
+        mo.disconnect();
       }
-      return false;
-    }
+    });
 
-    // First immediate attempt
-    if (tryPlace()) return;
+    mo.observe(metaWrap, { childList: true, subtree: true });
 
-    // Light retries – not loops, just a few delayed attempts
-    setTimeout(tryPlace, 150);
-    setTimeout(tryPlace, 400);
-    setTimeout(tryPlace, 900);
+    // Hard safety stop after a few seconds so we don't observe forever
+    setTimeout(function(){
+      try { mo.disconnect(); } catch(_){}
+    }, 6000);
   }
 
   function bootPDP(){
@@ -624,19 +622,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     moveBreadcrumbs(scopeEl, galleryWrap);
     setupAllergen(metaWrap);
     return true;
-  }
-
-  function hasPDP(){ return !!($('.product__wrapper') && $('.product-gallery__wrapper') && $('.product-meta__wrapper')); }
-  function moveBreadcrumbs(scopeEl, galleryWrap){
-    var crumbs = doc.querySelector('.w-cell.display-desktop.breadcrumb-align.row') || doc.querySelector('.breadcrumb-align.row.display-desktop') || doc.querySelector('.breadcrumb-align');
-    if (!crumbs) return;
-    var marker = doc.getElementById('llc-crumbs-marker');
-    if (!marker){ marker = doc.createElement('div'); marker.id = 'llc-crumbs-marker'; crumbs.parentElement && crumbs.parentElement.insertBefore(marker, crumbs); }
-    function place(){ var vw = win.innerWidth || 1024;
-      if (vw >= 600){ if (galleryWrap && crumbs.parentElement !== galleryWrap) galleryWrap.insertBefore(crumbs, galleryWrap.firstChild); }
-      else { if (marker.parentElement && crumbs.parentElement !== marker.parentElement) marker.parentElement.insertBefore(crumbs, marker.nextSibling); }
-    }
-    place(); win.addEventListener('resize', place, { passive:true });
   }
 
   // -------------- Robust boot helper (waits for header) --------------  
@@ -653,7 +638,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
-    stealAndPaintBgNow();
+    stealAndPaintBgNow(true);
     bindControllers();
     initLightboxWatcher();
 
@@ -686,6 +671,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
     try { restoreAll(); } catch(_){}
 
+    // reset bg steal attempts for the new route
+    BG_STEAL_TRIES = 0;
+
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
       if (currentScroll > MINI_BASE_H){
@@ -711,6 +699,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   // Extra safety: once everything is loaded, try one more time to steal bg
   win.addEventListener('load', function(){
-    stealAndPaintBgNow();
+    stealAndPaintBgNow(true);
   });
 })();
