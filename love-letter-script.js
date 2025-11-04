@@ -581,20 +581,49 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Route listener ---------------- */
-  var last=''; function tick(){
-    var href=(win.location&&win.location.href)||''; if(href!==last){ last=href;
-      markMainHeader();
-      setTimeout(function(){ bindControllers(); initLightboxWatcher(); }, 0);
-      var boots = 0, bootTimer = setInterval(function(){ boots++; if (bootPDP() || boots > 80) clearInterval(bootTimer); }, 50);
-    }}
-  if(window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
-  window.__LLC_V31__._tickId=setInterval(tick,150); tick();
+  // -------------- Robust boot helper (waits for header) --------------
+  var __llcBootDone = false;
 
-  /* ---------------- Initial ---------------- */
-  markMainHeader();
-  ensureMiniGroup();
-  computeCarrypad();
-  stealAndPaintBgNow();
-  bindControllers();
+  function fullBoot(){
+    if (__llcBootDone) return;
+    // Don't boot until the main header actually exists
+    if (!getFirstHeader()) return;
+
+    __llcBootDone = true;
+
+    markMainHeader();
+    ensureMiniGroup();
+    computeCarrypad();
+    stealAndPaintBgNow();
+    bindControllers();
+    initLightboxWatcher();
+
+    // PDP: keep your existing “retry until PDP DOM is ready” behavior
+    var boots = 0;
+    var bootTimer = setInterval(function(){
+      boots++;
+      if (bootPDP() || boots > 80) clearInterval(bootTimer);
+    }, 50);
+  }
+
+  /* ---------------- Route + header watcher ---------------- */
+  var lastHref = '';
+
+  function tick(){
+    var href = (win.location && win.location.href) || '';
+
+    // If the URL changed (SPA route change), reset our boot flag
+    if (href !== lastHref){
+      lastHref = href;
+      __llcBootDone = false;
+    }
+
+    // Try to (re)boot; fullBoot will only run once per route,
+    // and only after the header actually exists.
+    fullBoot();
+  }
+
+  if (window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
+  window.__LLC_V31__._tickId = setInterval(tick, 150);
+  tick(); // kick it once immediately
 })();
