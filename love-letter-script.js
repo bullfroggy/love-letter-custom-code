@@ -30,15 +30,6 @@
     return first;
   }
 
-  // simple viewport helper
-  function isDesktop(){
-    try {
-      return !!(win.matchMedia && win.matchMedia('(min-width:840px)').matches);
-    } catch(_){
-      return (win.innerWidth || 0) >= 840;
-    }
-  }
-
   // toggle home flag on <html> so CSS can react across routes
   function updateHomeFlag(){
     try{
@@ -209,9 +200,9 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
   }
 }
 
-/* Mobile header presence – hide main header only when miniheader is active AND JS has okayed it */
+/* Mobile header presence */
 @media (max-width:839px){
-  html[data-llc-miniheader="on"][data-llc-hide-mainheader="1"] header[data-llc-mainheader]{ display:none !important; }
+  header[data-llc-mainheader]{ display:none !important; }
 }
 
 /* Allergen accordion (styles only; DOM built by JS below) */
@@ -313,9 +304,10 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   }
   function restoreAll(){ SLOT_REG.forEach(function(_,k){ restoreKey(k); }); }
 
-  // helper: has desktop miniheader actually gone into "stuck" mode (left/right hoisted)
+  // helper: has miniheader actually gone into "stuck" mode (left/right hoisted)
   function miniHeaderWasStuck(){
-    return !!(window.__LLC_V31__ && window.__LLC_V31__.desktopStuck);
+    var bar = doc.getElementById('llc-miniheader');
+    return !!(bar && bar.classList.contains('is-stuck'));
   }
 
   // ensure everything is back in the header + miniheader reset
@@ -325,7 +317,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
-      HTML.removeAttribute('data-llc-hide-mainheader'); // NEW: make sure header can show again
     } catch(_){}
   }
 
@@ -428,9 +419,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     ['logo','order','icons','hamburger'].forEach(restoreKey);
     bar.classList.remove('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
-    HTML.removeAttribute('data-llc-hide-mainheader'); // desktop: never hide main header via mobile rule
-    // desktop miniheader is not stuck in this mode
-    window.__LLC_V31__.desktopStuck = false;
     updateMiniHeightVar();
   }
   function stickMiniDesktop(){
@@ -442,9 +430,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     hoist('icons', findIconsWrap(header),           right);
     bar.classList.add('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
-    HTML.removeAttribute('data-llc-hide-mainheader'); // desktop: keep header visible
-    // desktop miniheader has now entered stuck mode
-    window.__LLC_V31__.desktopStuck = true;
     updateMiniHeightVar();
   }
 
@@ -475,13 +460,11 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         }
         bar.classList.add('is-stuck','has-sides');
         HTML.setAttribute('data-llc-miniheader','on');
-        HTML.setAttribute('data-llc-hide-mainheader','1'); // MOBILE ONLY: now safe to hide main header
         updateMiniHeightVar();
         return;
       }
 
       // Desktop: only content hoisting toggles now (bg already on miniheader)
-      HTML.removeAttribute('data-llc-hide-mainheader'); // ensure header is visible on desktop
       if (pastThreshold()) stickMiniDesktop();
       else                 stageMiniDesktop();
     }
@@ -492,7 +475,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
     function rebind(){
       ensureMiniGroup();
-      HTML.removeAttribute('data-llc-hide-mainheader'); // make sure header is measurable
       computeCarrypad();
       restoreAll();
       markMainHeader();
@@ -516,13 +498,11 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     mq.addEventListener && mq.addEventListener('change', rebind);
     win.addEventListener('scroll', scroll, { passive:true });
     win.addEventListener('resize', function(){
-      HTML.removeAttribute('data-llc-hide-mainheader'); // ensure header isn't stuck hidden as viewport changes
       computeCarrypad();
       updateMiniHeightVar();
       stealAndPaintBgNow();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
-      HTML.removeAttribute('data-llc-hide-mainheader');
       computeCarrypad();
       updateMiniHeightVar();
       stealAndPaintBgNow();
@@ -739,12 +719,10 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     window.__LLC_V31__.routeInterceptorsInstalled = true;
 
     function preRoute(){
-      // Only bother restoring on DESKTOP when the desktop miniheader actually reached "stuck" state
-      if (isDesktop() && miniHeaderWasStuck()) {
+      // Only bother restoring if the miniheader actually reached "stuck" state
+      if (miniHeaderWasStuck()) {
         restoreHeaderToFull();
       }
-      // Regardless, make sure main header isn't stuck hidden when route changes
-      HTML.removeAttribute('data-llc-hide-mainheader');
     }
 
     // History API (pushState / replaceState)
@@ -790,13 +768,10 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     // Update home flag for the new route
     updateHomeFlag();
 
-    // If the desktop miniheader had actually gone "stuck", put everything back (DESKTOP only)
-    if (isDesktop() && miniHeaderWasStuck()) {
+    // If the miniheader had actually gone "stuck", put everything back
+    if (miniHeaderWasStuck()) {
       restoreHeaderToFull();
     }
-
-    // Make sure the new route starts with header visible
-    HTML.removeAttribute('data-llc-hide-mainheader');
 
     // If we were scrolled down, jump back to top so new header can fully expand
     try {
@@ -825,7 +800,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   // Extra safety: once everything is loaded, try one more time to steal bg
   win.addEventListener('load', function(){
     stealAndPaintBgNow();
-    HTML.removeAttribute('data-llc-hide-mainheader');
     // and re-assert the home flag if needed
     updateHomeFlag();
   });
