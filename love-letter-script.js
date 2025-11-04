@@ -7,7 +7,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen' };
+  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen+step1-hide-embed' };
 
   var win  = window;
   var doc  = document;
@@ -34,6 +34,9 @@
   (function installStyles(){
     var css = `
 :root { --llc-gap: 12px; }
+
+/* Step 1: hide custom code block */
+.embed-code-1 { display: none !important; }
 
 #llc-spacer{
   height: var(--llc-carrypad, 0px) !important;
@@ -295,7 +298,13 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
   function restoreAll(){ SLOT_REG.forEach(function(_,k){ restoreKey(k); }); }
 
-  // NEW (from header-height fix): ensure everything is back in the header + miniheader reset
+  // helper: has miniheader actually gone into "stuck" mode (left/right hoisted)
+  function miniHeaderWasStuck(){
+    var bar = doc.getElementById('llc-miniheader');
+    return !!(bar && bar.classList.contains('is-stuck'));
+  }
+
+  // ensure everything is back in the header + miniheader reset
   function restoreHeaderToFull(){
     try { restoreAll(); } catch(_){}
     try {
@@ -414,6 +423,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     hoist('order', findOrderContainer(header),      right);
     hoist('icons', findIconsWrap(header),           right);
     bar.classList.add('is-stuck','has-sides');
+    HTML.setAttribute('data-llc-miniheader','on');
     updateMiniHeightVar();
   }
 
@@ -512,7 +522,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }
   }
 
-  /* ---------------- PDP helpers (unchanged except Allergen hook) ---------------- */
+  /* ---------------- PDP helpers ---------------- */
   function hasPDP(){ return !!($('.product__wrapper') && $('.product-gallery__wrapper') && $('.product-meta__wrapper')); }
   function moveBreadcrumbs(scopeEl, galleryWrap){
     var crumbs = doc.querySelector('.w-cell.display-desktop.breadcrumb-align.row') || doc.querySelector('.breadcrumb-align.row.display-desktop') || doc.querySelector('.breadcrumb-align');
@@ -526,7 +536,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Allergen accordion (added, current behavior) ---------------- */
+  /* ---------------- Allergen accordion (added) ---------------- */
 
   // single retry timer so we don't stack intervals across PDPs
   var allergenRetryId = null;
@@ -542,7 +552,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       return /description/i.test((w.textContent || '').replace(/\s+/g,' ').trim()) && w.querySelector('button');
     }) || null;
   }
-
   function buildAllergenNode(D){
     var uid  = 'llc-allergen-'+Math.random().toString(36).slice(2,9);
     var wrap = D.createElement('div');
@@ -701,9 +710,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     window.__LLC_V31__.routeInterceptorsInstalled = true;
 
     function preRoute(){
-      // Put nav/logo/icons/order back into the header,
-      // clear miniheader "stuck" state so next route measures correctly.
-      restoreHeaderToFull();
+      // Only bother restoring if the miniheader actually reached "stuck" state
+      if (miniHeaderWasStuck()) {
+        restoreHeaderToFull();
+      }
     }
 
     // History API (pushState / replaceState)
@@ -740,13 +750,15 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function onRouteChange(){
     __llcBootDone = false;
 
-    // Make sure everything is back in the header
-    restoreHeaderToFull();
-
     // Stop any allergen retry tied to old PDP
     if (allergenRetryId) {
       clearInterval(allergenRetryId);
       allergenRetryId = null;
+    }
+
+    // If the miniheader had actually gone "stuck", put everything back
+    if (miniHeaderWasStuck()) {
+      restoreHeaderToFull();
     }
 
     // If we were scrolled down, jump back to top so new header can fully expand
