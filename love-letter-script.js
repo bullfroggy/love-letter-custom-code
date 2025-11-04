@@ -303,9 +303,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function findIconsWrap(h){return h&&h.querySelector('.header__icons'); }
 
   /* ---------------- Background: capture -> apply -> clear header ---------------- */
-  var BG_STEAL_TRIES = 0;
-  var BG_STEAL_MAX_TRIES = 30; // ~30 frames
-
   function getHeaderBgElement(header){
     return (header &&
       (header.querySelector('.w-block-background.w-image-block') ||
@@ -362,24 +359,32 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bgEl.style.backgroundImage = 'none';
     bgEl.style.backgroundColor = 'transparent';
   }
-  function stealAndPaintBgNow(){
-    var styles = captureHeaderBg();
-    var ready = styles && (
-      styles.hasImage ||
-      (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
-    );
 
-    if (!ready){
-      if (BG_STEAL_TRIES < BG_STEAL_MAX_TRIES){
-        BG_STEAL_TRIES++;
-        win.requestAnimationFrame(stealAndPaintBgNow);
+  // New: local retry (up to ~3 frames) instead of global BG_STEAL_TRIES
+  function stealAndPaintBgNow(){
+    var attempts = 0;
+
+    function doSteal(){
+      attempts++;
+      var styles = captureHeaderBg();
+      var ready = styles && (
+        styles.hasImage ||
+        (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
+      );
+
+      // If no usable background yet, retry a couple times
+      if (!ready){
+        if (attempts < 3){
+          win.requestAnimationFrame(doSteal);
+        }
+        return;
       }
-      // If we never see a usable bg, we just bail and leave header as-is.
-      return;
+
+      applyMiniBg(styles);
+      win.requestAnimationFrame(function(){ clearHeaderBg(); });
     }
 
-    applyMiniBg(styles);
-    win.requestAnimationFrame(function(){ clearHeaderBg(); });
+    doSteal();
   }
 
   /* ---------------- Desktop staged/stuck (content hoisting only) ---------------- */
@@ -448,7 +453,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       computeCarrypad();
       restoreAll();
       markMainHeader();
-      BG_STEAL_TRIES = 0;
       stealAndPaintBgNow();
       update();
     }
@@ -471,13 +475,11 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      BG_STEAL_TRIES = 0;
       stealAndPaintBgNow();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      BG_STEAL_TRIES = 0;
       stealAndPaintBgNow();
     }, { passive:true });
 
@@ -637,7 +639,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  // -------------- Robust boot helper (waits for header) --------------
+  // -------------- Robust boot helper (waits for header) --------------  
   var __llcBootDone = false;
 
   function fullBoot(){
@@ -662,10 +664,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       if (bootPDP() || boots > 80) clearInterval(bootTimer);
     }, 50);
 
-    // 🔁 Extra safety passes:
-    // Re-run the same logic that "scroll" would fix, after layout / fonts / bg
-    // have had a chance to settle. This mimics the "scroll fixes it" behavior
-    // without requiring user interaction.
+    // 🔁 Extra safety passes
     setTimeout(function(){
       if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
         window.__LLC_V31__.rebind();
@@ -683,15 +682,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   var lastHref = '';
 
   function onRouteChange(){
-    // mark this route as "needs a fresh boot"
     __llcBootDone = false;
 
-    // put all hoisted nodes back where they came from,
-    // so the new header can lay itself out normally
     try { restoreAll(); } catch(_){}
 
-    // if we were scrolled down when navigating, jump back to top
-    // so the new page's header can fully expand
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
       if (currentScroll > MINI_BASE_H){
@@ -703,14 +697,11 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function tick(){
     var href = (win.location && win.location.href) || '';
 
-    // If the URL changed (SPA-style route change)
     if (href !== lastHref){
       lastHref = href;
       onRouteChange();
     }
 
-    // Try to (re)boot; fullBoot will only run once per route,
-    // and only after the header actually exists.
     fullBoot();
   }
 
@@ -720,7 +711,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   // Extra safety: once everything is loaded, try one more time to steal bg
   win.addEventListener('load', function(){
-    BG_STEAL_TRIES = 0;
     stealAndPaintBgNow();
   });
 })();
