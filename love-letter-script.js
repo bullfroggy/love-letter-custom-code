@@ -209,11 +209,6 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
   }
 }
 
-/* Mobile header presence */
-@media (max-width:839px){
-  header[data-llc-mainheader]{ display:none !important; }
-}
-
 /* Allergen accordion (styles only; DOM built by JS below) */
 [data-llc-scope="pdp"] [data-llc-allergen="true"] { padding-top: var(--space-x3); }
 [data-llc-scope="pdp"] .llc-accordion-panel { overflow:hidden; max-height:0; transition:max-height .32s ease; will-change:max-height; }
