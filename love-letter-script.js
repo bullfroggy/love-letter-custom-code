@@ -6,11 +6,25 @@
     try { window.__LLC_V31__.rebind && window.__LLC_V31__.rebind(); } catch(_){}
     return;
   }
+  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen+step1-hide-embed' };
 
-  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen' };
+  (function(){
+    var w = window, d = document;
+    try {
+      var p = window.parent;
+      if (p && p !== window) {
+        try {
+          var pd = p.document;
+          if (pd && (pd.querySelector('header') || pd.querySelector('.w-block-wrapper.header'))) { w = p; d = pd; }
+        } catch(_){}
+      }
+    } catch(_){}
+    window.__LLC31_WIN__ = w;
+    window.__LLC31_DOC__ = d;
+  })();
 
-  var win  = window;
-  var doc  = document;
+  var win  = window.__LLC31_WIN__ || window;
+  var doc  = window.__LLC31_DOC__ || document;
   var HTML = doc.documentElement;
   var MINI_BASE_H = 57;
 
@@ -34,6 +48,9 @@
   (function installStyles(){
     var css = `
 :root { --llc-gap: 12px; }
+
+/* Step 1: hide custom code block */
+.embed-code-1 { display: none !important; }
 
 #llc-spacer{
   height: var(--llc-carrypad, 0px) !important;
@@ -335,21 +352,21 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function applyMiniBg(styles){
     var bar = ensureMiniBar();
     if (!styles){
-      // No styles yet – don't wipe anything, just keep existing state
-      return;
-    }
-    if (styles.hasImage){
-      bar.style.backgroundImage  = styles.image;
-      bar.style.backgroundRepeat = styles.repeat;
-      bar.style.backgroundSize   = styles.size;
-      bar.style.backgroundPosition = styles.position;
-    } else {
       bar.style.backgroundImage = 'none';
-    }
-    if (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent'){
-      bar.style.backgroundColor = styles.color;
     } else {
-      bar.style.removeProperty('backgroundColor');
+      if (styles.hasImage){
+        bar.style.backgroundImage  = styles.image;
+        bar.style.backgroundRepeat = styles.repeat;
+        bar.style.backgroundSize   = styles.size;
+        bar.style.backgroundPosition = styles.position;
+      } else {
+        bar.style.backgroundImage = 'none';
+      }
+      if (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent'){
+        bar.style.backgroundColor = styles.color;
+      } else {
+        bar.style.removeProperty('backgroundColor');
+      }
     }
   }
   function clearHeaderBg(){
@@ -359,31 +376,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bgEl.style.backgroundImage = 'none';
     bgEl.style.backgroundColor = 'transparent';
   }
-
-  // Local retry (up to ~3 frames) instead of global counters
   function stealAndPaintBgNow(){
-    var attempts = 0;
-
-    function doSteal(){
-      attempts++;
-      var styles = captureHeaderBg();
-      var ready = styles && (
-        styles.hasImage ||
-        (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
-      );
-
-      if (!ready){
-        if (attempts < 3){
-          win.requestAnimationFrame(doSteal);
-        }
-        return;
-      }
-
-      applyMiniBg(styles);
-      win.requestAnimationFrame(function(){ clearHeaderBg(); });
-    }
-
-    doSteal();
+    var styles = captureHeaderBg();
+    applyMiniBg(styles);
+    win.requestAnimationFrame(function(){ clearHeaderBg(); });
   }
 
   /* ---------------- Desktop staged/stuck (content hoisting only) ---------------- */
@@ -517,10 +513,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
 
   /* ---------------- Allergen accordion (added) ---------------- */
-
-  // single retry timer so we don't stack intervals
-  var allergenRetryId = null;
-
   function findDescriptionGroup(metaWrap){
     if (!metaWrap) return null;
     var btn = Array.from(metaWrap.querySelectorAll('button')).find(function(b){
@@ -558,6 +550,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     wrap.appendChild(btn); wrap.appendChild(panel); return wrap;
   }
 
+  // ✅ New, stable allergen placement
   function ensureAllergen(metaWrap){
     if (!metaWrap) return false;
 
@@ -597,39 +590,23 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function setupAllergen(metaWrap){
     if (!metaWrap) return;
 
-    // Clear any previous retry loop (from a previous PDP)
-    if (allergenRetryId) {
-      clearInterval(allergenRetryId);
-      allergenRetryId = null;
+    // We try a few times spaced out a bit, then stop forever.
+    // This handles late-loaded PDP content without constant DOM churn.
+    function tryPlace(){
+      if (ensureAllergen(metaWrap)) {
+        // Once placed, no more attempts needed
+        return true;
+      }
+      return false;
     }
 
-    // Try once immediately
-    if (ensureAllergen(metaWrap)) return;
+    // First immediate attempt
+    if (tryPlace()) return;
 
-    // Then start a light polling loop to handle slow PDP content / description load
-    var tries = 0;
-    var MAX_TRIES = 120; // 120 * 100ms = 12s
-
-    allergenRetryId = setInterval(function(){
-      tries++;
-
-      // PDP might have been torn down; stop if it's gone
-      if (!hasPDP()) {
-        if (tries > MAX_TRIES) {
-          clearInterval(allergenRetryId);
-          allergenRetryId = null;
-        }
-        return;
-      }
-
-      // meta wrapper might have been re-rendered; re-grab it if possible
-      var currentMeta = $('.product-meta__wrapper') || metaWrap;
-
-      if (ensureAllergen(currentMeta) || tries > MAX_TRIES) {
-        clearInterval(allergenRetryId);
-        allergenRetryId = null;
-      }
-    }, 100);
+    // Light retries – not loops, just a few delayed attempts
+    setTimeout(tryPlace, 150);
+    setTimeout(tryPlace, 400);
+    setTimeout(tryPlace, 900);
   }
 
   function bootPDP(){
@@ -645,17 +622,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     return true;
   }
 
-  // -------------- Robust boot helper (waits for header) --------------  
-  var __llcBootDone = false;
+  /* ---------------- Boot + Route listener (DOM-safe) ---------------- */
 
-  function fullBoot(){
-    if (__llcBootDone) return;
-    // Don't boot until the main header actually exists
-    if (!getFirstHeader()) return;
-
-    __llcBootDone = true;
-
-    // First pass: get everything wired up
+  // Boot everything once for the current page load
+  function llcBootCurrentRoute(){
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
@@ -663,66 +633,48 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bindControllers();
     initLightboxWatcher();
 
-    // PDP: keep your existing “retry until PDP DOM is ready” behavior
+    // PDP bits (retry until ready)
     var boots = 0;
     var bootTimer = setInterval(function(){
       boots++;
       if (bootPDP() || boots > 80) clearInterval(bootTimer);
     }, 50);
-
-    // 🔁 Extra safety passes
-    setTimeout(function(){
-      if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
-        window.__LLC_V31__.rebind();
-      }
-    }, 250);
-
-    setTimeout(function(){
-      if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
-        window.__LLC_V31__.rebind();
-      }
-    }, 900);
   }
 
-  /* ---------------- Route + header watcher ---------------- */
-  var lastHref = '';
-
-  function onRouteChange(){
-    __llcBootDone = false;
-
-    try { restoreAll(); } catch(_){}
-
-    // Stop any allergen retry tied to old PDP
-    if (allergenRetryId) {
-      clearInterval(allergenRetryId);
-      allergenRetryId = null;
+  // Re-run the dynamic bits on route change
+  function llcOnRouteChange(){
+    if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
+      // rebind() already does: ensureMiniGroup, computeCarrypad, restoreAll, markMainHeader,
+      // initCarrypadRobust, stealAndPaintBgNow, wiring scroll/resize, then update()
+      window.__LLC_V31__.rebind();
+    } else {
+      llcBootCurrentRoute();
     }
 
-    try {
-      var currentScroll = win.scrollY || win.pageYOffset || 0;
-      if (currentScroll > MINI_BASE_H){
-        win.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      }
-    } catch(_){}
+    // Reboot PDP on new route
+    var boots = 0;
+    var bootTimer = setInterval(function(){
+      boots++;
+      if (bootPDP() || boots > 80) clearInterval(bootTimer);
+    }, 50);
   }
 
+  // Watch for URL changes (client-side routing)
+  var lastHref = (win.location && win.location.href) || '';
   function tick(){
     var href = (win.location && win.location.href) || '';
-
     if (href !== lastHref){
       lastHref = href;
-      onRouteChange();
+      llcOnRouteChange();
     }
-
-    fullBoot();
   }
-
   if (window.__LLC_V31__._tickId) clearInterval(window.__LLC_V31__._tickId);
   window.__LLC_V31__._tickId = setInterval(tick, 150);
-  tick(); // kick it once immediately
 
-  // Extra safety: once everything is loaded, try one more time to steal bg
-  win.addEventListener('load', function(){
-    stealAndPaintBgNow();
-  });
+  // Initial boot – wait for DOM if needed
+  if (doc.readyState === 'loading'){
+    doc.addEventListener('DOMContentLoaded', llcBootCurrentRoute, { once: true });
+  } else {
+    llcBootCurrentRoute();
+  }
 })();
