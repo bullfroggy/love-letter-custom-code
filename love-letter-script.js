@@ -50,7 +50,7 @@
   display: block !important;
 }
 
-body{ overflow-x: hidden; width: 100vw; }
+html, body{ overflow-x: hidden; width: 100vw; }
 
 /* keep footer shadow; header bg shadow is removed once miniheader is active */
 .w-block-wrapper[data-block-purpose="footer"] { box-shadow: rgba(0,0,0,.25) 0 -5px 15px; z-index: 1; }
