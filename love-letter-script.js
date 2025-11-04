@@ -295,6 +295,16 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   }
   function restoreAll(){ SLOT_REG.forEach(function(_,k){ restoreKey(k); }); }
 
+  // NEW: ensure everything is back in the header + miniheader reset
+  function restoreHeaderToFull(){
+    try { restoreAll(); } catch(_){}
+    try {
+      var bar = doc.getElementById('llc-miniheader');
+      if (bar) bar.classList.remove('is-stuck','has-sides');
+      HTML.removeAttribute('data-llc-miniheader');
+    } catch(_){}
+  }
+
   /* ---------------- Finders ---------------- */
   function findLogo(h){ if (!h) return null; var a = h.querySelector('a.w-sitelogo, .w-sitelogo a, a .w-sitelogo'); return a?(a.closest('a')||a):h.querySelector('.w-sitelogo'); }
   function findDesktopNavContainer(h){return h&&(h.querySelector('.w-nav.nav--desktop')||h.querySelector('.w-nav')); }
@@ -303,10 +313,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function findIconsWrap(h){return h&&h.querySelector('.header__icons'); }
 
   /* ---------------- Background: capture -> apply -> clear header ---------------- */
-  var BG_STEAL_TRIES = 0;
-  var BG_STEAL_MAX_TRIES = 60; // ~60 frames (~1s) per run
-  var BG_STOLEN_ONCE   = false; // per-route
-
   function getHeaderBgElement(header){
     return (header &&
       (header.querySelector('.w-block-background.w-image-block') ||
@@ -339,6 +345,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function applyMiniBg(styles){
     var bar = ensureMiniBar();
     if (!styles){
+      // No styles yet – don't wipe anything, just keep existing state
       return;
     }
     if (styles.hasImage){
@@ -363,31 +370,31 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     bgEl.style.backgroundColor = 'transparent';
   }
 
-  // firstCall = true when we want to reset the attempt counter
-  function stealAndPaintBgNow(firstCall){
-    // Only one successful steal per route;
-    // on route change we reset BG_STOLEN_ONCE + BG_STEAL_TRIES.
-    if (BG_STOLEN_ONCE) return;
+  // New: local retry (up to ~3 frames) instead of global BG_STEAL_TRIES
+  function stealAndPaintBgNow(){
+    var attempts = 0;
 
-    if (firstCall) BG_STEAL_TRIES = 0;
+    function doSteal(){
+      attempts++;
+      var styles = captureHeaderBg();
+      var ready = styles && (
+        styles.hasImage ||
+        (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
+      );
 
-    var styles = captureHeaderBg();
-    var ready = styles && (
-      styles.hasImage ||
-      (styles.color && styles.color !== 'rgba(0, 0, 0, 0)' && styles.color !== 'transparent')
-    );
-
-    if (!ready){
-      if (BG_STEAL_TRIES < BG_STEAL_MAX_TRIES){
-        BG_STEAL_TRIES++;
-        win.requestAnimationFrame(function(){ stealAndPaintBgNow(false); });
+      // If no usable background yet, retry a couple times
+      if (!ready){
+        if (attempts < 3){
+          win.requestAnimationFrame(doSteal);
+        }
+        return;
       }
-      return;
+
+      applyMiniBg(styles);
+      win.requestAnimationFrame(function(){ clearHeaderBg(); });
     }
 
-    applyMiniBg(styles);
-    BG_STOLEN_ONCE = true; // ✅ committed for this route
-    win.requestAnimationFrame(function(){ clearHeaderBg(); });
+    doSteal();
   }
 
   /* ---------------- Desktop staged/stuck (content hoisting only) ---------------- */
@@ -456,7 +463,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       computeCarrypad();
       restoreAll();
       markMainHeader();
-      // no steal here; fullBoot handles initial steal per route
+      stealAndPaintBgNow();
       update();
     }
 
@@ -478,13 +485,12 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      // can help the *current* route’s first steal if it hasn’t happened yet
-      if (!BG_STOLEN_ONCE) stealAndPaintBgNow(false);
+      stealAndPaintBgNow();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      if (!BG_STOLEN_ONCE) stealAndPaintBgNow(false);
+      stealAndPaintBgNow();
     }, { passive:true });
 
     // Initial run
@@ -507,7 +513,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }
   }
 
-  /* ---------------- PDP helpers ---------------- */
+  /* ---------------- PDP helpers (unchanged except Allergen hook) ---------------- */
   function hasPDP(){ return !!($('.product__wrapper') && $('.product-gallery__wrapper') && $('.product-meta__wrapper')); }
   function moveBreadcrumbs(scopeEl, galleryWrap){
     var crumbs = doc.querySelector('.w-cell.display-desktop.breadcrumb-align.row') || doc.querySelector('.breadcrumb-align.row.display-desktop') || doc.querySelector('.breadcrumb-align');
@@ -521,7 +527,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Allergen accordion ---------------- */
+  /* ---------------- Allergen accordion (added) ---------------- */
   function findDescriptionGroup(metaWrap){
     if (!metaWrap) return null;
     var btn = Array.from(metaWrap.querySelectorAll('button')).find(function(b){
@@ -598,22 +604,23 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function setupAllergen(metaWrap){
     if (!metaWrap) return;
 
-    // Try immediately
-    if (ensureAllergen(metaWrap)) return;
-
-    // If description/meta loads later, watch for it – but stop once placed
-    var mo = new MutationObserver(function(){
-      if (ensureAllergen(metaWrap)){
-        mo.disconnect();
+    // We try a few times spaced out a bit, then stop forever.
+    // This handles late-loaded PDP content without constant DOM churn.
+    function tryPlace(){
+      if (ensureAllergen(metaWrap)) {
+        // Once placed, no more attempts needed
+        return true;
       }
-    });
+      return false;
+    }
 
-    mo.observe(metaWrap, { childList: true, subtree: true });
+    // First immediate attempt
+    if (tryPlace()) return;
 
-    // Hard safety stop after a few seconds so we don't observe forever
-    setTimeout(function(){
-      try { mo.disconnect(); } catch(_){}
-    }, 6000);
+    // Light retries – not loops, just a few delayed attempts
+    setTimeout(tryPlace, 150);
+    setTimeout(tryPlace, 400);
+    setTimeout(tryPlace, 900);
   }
 
   function bootPDP(){
@@ -643,8 +650,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
-    // Each route gets its own steal; BG_STOLEN_ONCE is per-route and reset on route change
-    stealAndPaintBgNow(true);
+    stealAndPaintBgNow();
     bindControllers();
     initLightboxWatcher();
 
@@ -655,7 +661,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       if (bootPDP() || boots > 80) clearInterval(bootTimer);
     }, 50);
 
-    // Extra safety passes
+    // 🔁 Extra safety passes
     setTimeout(function(){
       if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
         window.__LLC_V31__.rebind();
@@ -669,26 +675,55 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }, 900);
   }
 
+  /* ---------------- Route interceptors: restore before SPA nav ---------------- */
+  (function installRouteInterceptors(){
+    if (window.__LLC_V31__.routeInterceptorsInstalled) return;
+    window.__LLC_V31__.routeInterceptorsInstalled = true;
+
+    function preRoute(){
+      // Put nav/logo/icons/order back into the header,
+      // clear miniheader "stuck" state so next route measures correctly.
+      restoreHeaderToFull();
+    }
+
+    // History API (pushState / replaceState)
+    var _push = history.pushState, _replace = history.replaceState;
+    history.pushState = function(){
+      preRoute();
+      return _push.apply(this, arguments);
+    };
+    history.replaceState = function(){
+      preRoute();
+      return _replace.apply(this, arguments);
+    };
+
+    // Browser nav
+    win.addEventListener('popstate', preRoute, { passive:true });
+    win.addEventListener('hashchange', preRoute, { passive:true });
+
+    // In-app same-origin link clicks (capture so we run before router)
+    doc.addEventListener('click', function(e){
+      if (e.defaultPrevented) return;
+      var a = e.target && e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      try {
+        var url = new URL(a.href, win.location.href);
+        if (url.origin !== win.location.origin) return; // external
+        if (url.href !== win.location.href) preRoute();
+      } catch(_){}
+    }, true);
+  })();
+
   /* ---------------- Route + header watcher ---------------- */
   var lastHref = '';
 
   function onRouteChange(){
     __llcBootDone = false;
 
-    try { restoreAll(); } catch(_){}
+    // Make sure everything is back in the header
+    restoreHeaderToFull();
 
-    // Reset allergen state so new PDPs can re-place it cleanly
-    try {
-      Array.prototype.forEach.call(
-        doc.querySelectorAll('.product-meta__wrapper[data-llc-allergen-ready]'),
-        function(el){ el.removeAttribute('data-llc-allergen-ready'); }
-      );
-    } catch(_){}
-
-    // 🔁 IMPORTANT: allow bg steal to run again on this new route
-    BG_STOLEN_ONCE = false;
-    BG_STEAL_TRIES = 0;
-
+    // If we were scrolled down, jump back to top so new header can fully expand
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
       if (currentScroll > MINI_BASE_H){
@@ -712,8 +747,8 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   window.__LLC_V31__._tickId = setInterval(tick, 150);
   tick(); // kick it once immediately
 
-  // Extra safety: once everything is loaded, try one more time to steal bg (for current route)
+  // Extra safety: once everything is loaded, try one more time to steal bg
   win.addEventListener('load', function(){
-    if (!BG_STOLEN_ONCE) stealAndPaintBgNow(true);
+    stealAndPaintBgNow();
   });
 })();
