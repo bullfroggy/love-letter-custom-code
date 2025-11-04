@@ -552,27 +552,63 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     btn.addEventListener('click', function(e){ e.preventDefault(); (btn.getAttribute('aria-expanded') === 'true') ? closePanel() : openPanel(); });
     wrap.appendChild(btn); wrap.appendChild(panel); return wrap;
   }
+
   function ensureAllergen(metaWrap){
     if (!metaWrap) return false;
+
+    // If we've already placed the allergen block on this PDP, don't touch DOM again.
+    if (metaWrap.hasAttribute('data-llc-allergen-ready')) return true;
+
     var group = findDescriptionGroup(metaWrap);
     if (!group || !group.parentElement) return false;
+
     var anchor = doc.getElementById('llc-allergen-anchor');
-    if (!anchor){ anchor = doc.createElement('div'); anchor.id = 'llc-allergen-anchor'; }
-    if (group.nextSibling) group.parentElement.insertBefore(anchor, group.nextSibling); else group.parentElement.appendChild(anchor);
+    if (!anchor){
+      anchor = doc.createElement('div');
+      anchor.id = 'llc-allergen-anchor';
+    }
+
+    // Ensure anchor sits right after the description group
+    if (group.nextSibling) {
+      group.parentElement.insertBefore(anchor, group.nextSibling);
+    } else {
+      group.parentElement.appendChild(anchor);
+    }
+
     var wrap = doc.getElementById('llc-allergen-wrap');
     if (!wrap) wrap = buildAllergenNode(doc);
-    if (anchor.parentNode && wrap !== anchor.nextSibling){ anchor.parentNode.insertBefore(wrap, anchor.nextSibling); }
-    Array.from(metaWrap.querySelectorAll('[data-llc-allergen="true"]')).filter(function(el){ return el !== wrap; }).forEach(function(el){ el.remove(); });
+
+    // Only insert if it's not already exactly where we want it
+    if (anchor.parentNode && wrap !== anchor.nextSibling){
+      anchor.parentNode.insertBefore(wrap, anchor.nextSibling);
+    }
+
+    // Mark this meta wrapper as "done" so we don't keep touching it
+    metaWrap.setAttribute('data-llc-allergen-ready', 'true');
+
     return true;
   }
+
   function setupAllergen(metaWrap){
     if (!metaWrap) return;
-    var ok = ensureAllergen(metaWrap);
-    var tries = 0;
-    var retry = setInterval(function(){ if (ok || tries++ > 120) { clearInterval(retry); return; } ok = ensureAllergen(metaWrap); }, 50);
-    var rafId = null;
-    var mo = new MutationObserver(function(){ if (rafId) cancelAnimationFrame(rafId); rafId = requestAnimationFrame(function(){ ensureAllergen(metaWrap); }); });
-    mo.observe(metaWrap, { childList: true, subtree: true });
+
+    // We try a few times spaced out a bit, then stop forever.
+    // This handles late-loaded PDP content without constant DOM churn.
+    function tryPlace(){
+      if (ensureAllergen(metaWrap)) {
+        // Once placed, no more attempts needed
+        return true;
+      }
+      return false;
+    }
+
+    // First immediate attempt
+    if (tryPlace()) return;
+
+    // Light retries – not loops, just a few delayed attempts
+    setTimeout(tryPlace, 150);
+    setTimeout(tryPlace, 400);
+    setTimeout(tryPlace, 900);
   }
 
   function bootPDP(){
@@ -611,10 +647,10 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
     __llcBootDone = true;
 
+    // First pass: get everything wired up
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
-    BG_STEAL_TRIES = 0;
     stealAndPaintBgNow();
     bindControllers();
     initLightboxWatcher();
@@ -625,7 +661,24 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       boots++;
       if (bootPDP() || boots > 80) clearInterval(bootTimer);
     }, 50);
+
+    // 🔁 Extra safety passes:
+    // Re-run the same logic that "scroll" would fix, after layout / fonts / bg
+    // have had a chance to settle. This mimics the "scroll fixes it" behavior
+    // without requiring user interaction.
+    setTimeout(function(){
+      if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
+        window.__LLC_V31__.rebind();
+      }
+    }, 250);
+
+    setTimeout(function(){
+      if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
+        window.__LLC_V31__.rebind();
+      }
+    }, 900);
   }
+
 
   /* ---------------- Route + header watcher ---------------- */
   var lastHref = '';
