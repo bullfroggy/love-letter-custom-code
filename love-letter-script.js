@@ -305,6 +305,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   /* ---------------- Background: capture -> apply -> clear header ---------------- */
   var BG_STEAL_TRIES = 0;
   var BG_STEAL_MAX_TRIES = 60; // ~60 frames (~1s) per run
+  var BG_STOLEN_ONCE   = false;
 
   function getHeaderBgElement(header){
     return (header &&
@@ -338,7 +339,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
   function applyMiniBg(styles){
     var bar = ensureMiniBar();
     if (!styles){
-      // No styles yet – don't wipe anything, just keep existing state
       return;
     }
     if (styles.hasImage){
@@ -365,6 +365,9 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   // firstCall = true when we want to reset the attempt counter
   function stealAndPaintBgNow(firstCall){
+    // Once we’ve successfully stolen once, never do it again (no re-run on route change)
+    if (BG_STOLEN_ONCE) return;
+
     if (firstCall) BG_STEAL_TRIES = 0;
 
     var styles = captureHeaderBg();
@@ -378,11 +381,11 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
         BG_STEAL_TRIES++;
         win.requestAnimationFrame(function(){ stealAndPaintBgNow(false); });
       }
-      // If we never see a usable bg, we just bail and leave header as-is.
       return;
     }
 
     applyMiniBg(styles);
+    BG_STOLEN_ONCE = true; // ✅ committed
     win.requestAnimationFrame(function(){ clearHeaderBg(); });
   }
 
@@ -452,7 +455,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
       computeCarrypad();
       restoreAll();
       markMainHeader();
-      stealAndPaintBgNow(true);
+      // ✳️ No more stealAndPaintBgNow here – we do NOT re-steal on route change
       update();
     }
 
@@ -474,12 +477,13 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      stealAndPaintBgNow(true);
+      // Only help the *first* bg steal; after that BG_STOLEN_ONCE stops this anyway
+      if (!BG_STOLEN_ONCE) stealAndPaintBgNow(false);
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      stealAndPaintBgNow(true);
+      if (!BG_STOLEN_ONCE) stealAndPaintBgNow(false);
     }, { passive:true });
 
     // Initial run
@@ -502,7 +506,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }
   }
 
-  /* ---------------- PDP helpers (unchanged except Allergen hook) ---------------- */
+  /* ---------------- PDP helpers ---------------- */
   function hasPDP(){ return !!($('.product__wrapper') && $('.product-gallery__wrapper') && $('.product-meta__wrapper')); }
   function moveBreadcrumbs(scopeEl, galleryWrap){
     var crumbs = doc.querySelector('.w-cell.display-desktop.breadcrumb-align.row') || doc.querySelector('.breadcrumb-align.row.display-desktop') || doc.querySelector('.breadcrumb-align');
@@ -516,7 +520,7 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Allergen accordion (added) ---------------- */
+  /* ---------------- Allergen accordion ---------------- */
   function findDescriptionGroup(metaWrap){
     if (!metaWrap) return null;
     var btn = Array.from(metaWrap.querySelectorAll('button')).find(function(b){
@@ -629,27 +633,24 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   function fullBoot(){
     if (__llcBootDone) return;
-    // Don't boot until the main header actually exists
     if (!getFirstHeader()) return;
 
     __llcBootDone = true;
 
-    // First pass: get everything wired up
     markMainHeader();
     ensureMiniGroup();
     computeCarrypad();
-    stealAndPaintBgNow(true);
+    // Only attempt bg steal if we haven't successfully done it yet
+    if (!BG_STOLEN_ONCE) stealAndPaintBgNow(true);
     bindControllers();
     initLightboxWatcher();
 
-    // PDP: keep your existing “retry until PDP DOM is ready” behavior
     var boots = 0;
     var bootTimer = setInterval(function(){
       boots++;
       if (bootPDP() || boots > 80) clearInterval(bootTimer);
     }, 50);
 
-    // 🔁 Extra safety passes
     setTimeout(function(){
       if (window.__LLC_V31__ && typeof window.__LLC_V31__.rebind === 'function'){
         window.__LLC_V31__.rebind();
@@ -671,8 +672,16 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
     try { restoreAll(); } catch(_){}
 
-    // reset bg steal attempts for the new route
-    BG_STEAL_TRIES = 0;
+    // Clear allergen "ready" flags so new PDPs can re-place it
+    try {
+      Array.prototype.forEach.call(
+        doc.querySelectorAll('.product-meta__wrapper[data-llc-allergen-ready]'),
+        function(el){ el.removeAttribute('data-llc-allergen-ready'); }
+      );
+    } catch(_){}
+
+    // Note: we deliberately do NOT reset BG_STOLEN_ONCE or re-run bg steal.
+    // The miniheader keeps whatever bg it stole on first page.
 
     try {
       var currentScroll = win.scrollY || win.pageYOffset || 0;
@@ -699,6 +708,6 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
 
   // Extra safety: once everything is loaded, try one more time to steal bg
   win.addEventListener('load', function(){
-    stealAndPaintBgNow(true);
+    if (!BG_STOLEN_ONCE) stealAndPaintBgNow(true);
   });
 })();
