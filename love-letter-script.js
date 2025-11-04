@@ -679,17 +679,34 @@ ${ isHome() ? '.📚19-10-1rI2oH .image__wrapper{display:none;}' : '' }
     }, 900);
   }
 
-
   /* ---------------- Route + header watcher ---------------- */
   var lastHref = '';
+
+  function onRouteChange(){
+    // mark this route as "needs a fresh boot"
+    __llcBootDone = false;
+
+    // put all hoisted nodes back where they came from,
+    // so the new header can lay itself out normally
+    try { restoreAll(); } catch(_){}
+
+    // if we were scrolled down when navigating, jump back to top
+    // so the new page's header can fully expand
+    try {
+      var currentScroll = win.scrollY || win.pageYOffset || 0;
+      if (currentScroll > MINI_BASE_H){
+        win.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+    } catch(_){}
+  }
 
   function tick(){
     var href = (win.location && win.location.href) || '';
 
-    // If the URL changed (SPA route change), reset our boot flag
+    // If the URL changed (SPA-style route change)
     if (href !== lastHref){
       lastHref = href;
-      __llcBootDone = false;
+      onRouteChange();
     }
 
     // Try to (re)boot; fullBoot will only run once per route,
