@@ -1,5 +1,4 @@
 /* LLC v31.8.4-sticky-bg-steal — sticky miniheader (no fixed), steal header bg then clear it, LIGHTBOX-only watcher
-   + Allergen Info accordion (added, no other behavior changed)
    Step 1 tweak: hide .embed-code-1 */
 (function(){
   if (window.__LLC_V31__) {
@@ -7,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+allergen+step1-hide-embed' };
+  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+step1-hide-embed' };
 
   var win  = window;
   var doc  = document;
@@ -213,12 +212,6 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
 @media (max-width:839px){
   header[data-llc-mainheader]{ display:none !important; }
 }
-
-/* Allergen accordion (styles only; DOM built by JS below) */
-[data-llc-scope="pdp"] [data-llc-allergen="true"] { padding-top: var(--space-x3); }
-[data-llc-scope="pdp"] .llc-accordion-panel { overflow:hidden; max-height:0; transition:max-height .32s ease; will-change:max-height; }
-[data-llc-scope="pdp"] .llc-accordion-button .icon svg { transform: rotate(180deg); transition: none !important; }
-[data-llc-scope="pdp"] .llc-accordion-button[aria-expanded="true"] .icon svg { transform: rotate(0deg); }
 
 /* home tweak via html flag */
 html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
@@ -562,132 +555,14 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     place(); win.addEventListener('resize', place, { passive:true });
   }
 
-  /* ---------------- Allergen accordion (added) ---------------- */
-
-  // single retry timer so we don't stack intervals across PDPs
-  var allergenRetryId = null;
-
-  function findDescriptionGroup(metaWrap){
-    if (!metaWrap) return null;
-    var btn = Array.from(metaWrap.querySelectorAll('button')).find(function(b){
-      var p = b.querySelector('p.form-label');
-      return p && /description/i.test((p.textContent || '').replace(/\s+/g,' ').trim());
-    });
-    if (btn) return btn.parentElement || btn.closest('.w-wrapper') || btn;
-    return Array.from(metaWrap.querySelectorAll('.w-wrapper')).find(function(w){
-      return /description/i.test((w.textContent || '').replace(/\s+/g,' ').trim()) && w.querySelector('button');
-    }) || null;
-  }
-  function buildAllergenNode(D){
-    var uid  = 'llc-allergen-'+Math.random().toString(36).slice(2,9);
-    var wrap = D.createElement('div');
-    wrap.id = 'llc-allergen-wrap';
-    wrap.setAttribute('data-llc-allergen','true');
-    var btn  = D.createElement('button');
-    btn.type = 'button';
-    btn.id   = uid+'-header';
-    btn.className = '📚19-10-1IAuGr 📚19-10-1zAswq llc-accordion-button';
-    btn.setAttribute('aria-controls', uid+'-panel');
-    btn.setAttribute('aria-expanded', 'false');
-    btn.innerHTML = '\n    <div class="📚19-10-1agDbH"><div>\n      <p class="form-label 📚19-10-1uGevg 📚19-10-1EEwzY"\n        style="line-height:1.1;letter-spacing:0.01em;--mobile-base-font-size:16;--mobile-font-size-scale:1.15;font-family:Larsseit;font-weight:bold;color:rgb(0, 0, 0);">\n        Allergen Info\n      </p>\n    </div></div>\n    <div class="📚19-10-1k6MzQ">\n      <span class="icon 📚19-10-1vCfSe" style="--color:currentColor;--icon-size:16px;--fill:currentColor;">\n        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 16 16">\n          <path fill="currentColor" fill-rule="evenodd"\n            d="M7.3 4.3a1 1 0 0 1 1.4 0l6 6-1.4 1.4L8 6.42l-5.3 5.3-1.4-1.42 6-6Z"\n            clip-rule="evenodd"></path>\n        </svg>\n      </span>\n    </div>';
-    var panel = D.createElement('div');
-    panel.id = uid+'-panel';
-    panel.setAttribute('role','region');
-    panel.setAttribute('aria-labelledby', uid+'-header');
-    panel.className = '📚19-10-1pynEn llc-accordion-panel';
-    panel.style.maxHeight = '0px';
-    panel.innerHTML = '\n    <div class="w-product-description__wrapper" showsubtitle="true" positiontop="true">\n      <div class="text-component w-product-description 📚19-10-1uGevg 📚19-10-1EEwzY"\n          style="line-height:1.3; letter-spacing:0; --mobile-base-font-size:16; --mobile-font-size-scale:1.15; font-family:Larsseit; font-weight:400; color:rgb(0, 0, 0);">\n        <span>\n          <p>All truffles contain <strong>dairy</strong></p>\n          <br>\n          <div style="opacity:.9; line-height:1.5">\n            <strong>Legend</strong><br>\n            [G] = contains gluten\n            <br>\n            [P] = contains peanuts\n            <br>\n            [T] = contains tree nuts\n            <br>\n            [F] = gluten & nut free\n          </div>\n        </span>\n      </div>\n    </div>';
-    function openPanel(){ btn.setAttribute('aria-expanded','true'); panel.style.maxHeight = panel.scrollHeight + 'px'; }
-    function closePanel(){ btn.setAttribute('aria-expanded','false'); panel.style.maxHeight = panel.scrollHeight + 'px'; void panel.offsetHeight; panel.style.maxHeight = '0px'; }
-    panel.addEventListener('transitionend', function(e){ if (e.propertyName !== 'max-height') return; if (btn.getAttribute('aria-expanded') === 'true') panel.style.maxHeight = 'unset'; });
-    btn.addEventListener('click', function(e){ e.preventDefault(); (btn.getAttribute('aria-expanded') === 'true') ? closePanel() : openPanel(); });
-    wrap.appendChild(btn); wrap.appendChild(panel); return wrap;
-  }
-
-  function ensureAllergen(metaWrap){
-    if (!metaWrap) return false;
-
-    // If we've already placed the allergen block on this PDP, don't touch DOM again.
-    if (metaWrap.hasAttribute('data-llc-allergen-ready')) return true;
-
-    var group = findDescriptionGroup(metaWrap);
-    if (!group || !group.parentElement) return false;
-
-    var anchor = doc.getElementById('llc-allergen-anchor');
-    if (!anchor){
-      anchor = doc.createElement('div');
-      anchor.id = 'llc-allergen-anchor';
-    }
-
-    // Ensure anchor sits right after the description group
-    if (group.nextSibling) {
-      group.parentElement.insertBefore(anchor, group.nextSibling);
-    } else {
-      group.parentElement.appendChild(anchor);
-    }
-
-    var wrap = doc.getElementById('llc-allergen-wrap');
-    if (!wrap) wrap = buildAllergenNode(doc);
-
-    // Only insert if it's not already exactly where we want it
-    if (anchor.parentNode && wrap !== anchor.nextSibling){
-      anchor.parentNode.insertBefore(wrap, anchor.nextSibling);
-    }
-
-    // Mark this meta wrapper as "done" so we don't keep touching it
-    metaWrap.setAttribute('data-llc-allergen-ready', 'true');
-
-    return true;
-  }
-
-  function setupAllergen(metaWrap){
-    if (!metaWrap) return;
-
-    // Clear any previous retry loop (from a previous PDP)
-    if (allergenRetryId) {
-      clearInterval(allergenRetryId);
-      allergenRetryId = null;
-    }
-
-    // Try once immediately
-    if (ensureAllergen(metaWrap)) return;
-
-    // Then start a light polling loop to handle slow PDP content / description load
-    var tries = 0;
-    var MAX_TRIES = 120; // 120 * 100ms = 12s
-
-    allergenRetryId = setInterval(function(){
-      tries++;
-
-      // PDP might have been torn down; stop if it's gone
-      if (!hasPDP()) {
-        if (tries > MAX_TRIES) {
-          clearInterval(allergenRetryId);
-          allergenRetryId = null;
-        }
-        return;
-      }
-
-      // meta wrapper might have been re-rendered; re-grab it if possible
-      var currentMeta = $('.product-meta__wrapper') || metaWrap;
-
-      if (ensureAllergen(currentMeta) || tries > MAX_TRIES) {
-        clearInterval(allergenRetryId);
-        allergenRetryId = null;
-      }
-    }, 100);
-  }
-
   function bootPDP(){
     if (!hasPDP()) return false;
     var productWrapper = $('.product__wrapper');
     var galleryWrap    = $('.product-gallery__wrapper');
-    var metaWrap       = $('.product-meta__wrapper');
     var scopeEl = (productWrapper && (productWrapper.closest('.w-block[id]') || productWrapper.closest('.w-block') || productWrapper)) || null;
     if (scopeEl) scopeEl.setAttribute('data-llc-scope','pdp');
     if (productWrapper && productWrapper.parentElement) productWrapper.parentElement.setAttribute('data-llc-clear-mt','');
     moveBreadcrumbs(scopeEl, galleryWrap);
-    setupAllergen(metaWrap);
     return true;
   }
 
@@ -788,12 +663,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
   function onRouteChange(){
     __llcBootDone = false;
-
-    // stop any allergen retry tied to old PDP
-    if (allergenRetryId) {
-      clearInterval(allergenRetryId);
-      allergenRetryId = null;
-    }
 
     // Update home flag for the new route
     updateHomeFlag();
