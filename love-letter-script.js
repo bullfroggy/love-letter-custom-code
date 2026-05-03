@@ -214,6 +214,25 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
 }
 
 /* home tweak via html flag */
+/* Remove default section padding inside embed-code blocks */
+[class^="embed-code-"] .container,
+[class*=" embed-code-"] .container{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Miniheader hide/show on scroll */
+#llc-miniheader{
+  transform: translateY(0);
+  transition: transform .22s ease;
+  will-change: transform;
+}
+html[data-llc-miniheader-hidden="1"] #llc-miniheader{
+  transform: translateY(calc(-1 * var(--llc-mini-h, 57px)));
+}
+
 html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 `;
     onceStyle('llc-v31-styles', css);
@@ -284,6 +303,62 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
   }
 
+  var MINI_VIS = { lastY: 0, downAccum: 0, upAccum: 0, hidden: false };
+
+  function currentScrollY(){
+    return Math.max(0, win.scrollY || win.pageYOffset || 0);
+  }
+
+  function setMiniHidden(hidden){
+    hidden = !!hidden;
+    MINI_VIS.hidden = hidden;
+    if (hidden) HTML.setAttribute('data-llc-miniheader-hidden','1');
+    else HTML.removeAttribute('data-llc-miniheader-hidden');
+  }
+
+  function resetMiniVisibility(){
+    MINI_VIS.lastY = currentScrollY();
+    MINI_VIS.downAccum = 0;
+    MINI_VIS.upAccum = 0;
+    setMiniHidden(false);
+  }
+
+  function updateMiniVisibilityOnScroll(){
+    var y = currentScrollY();
+    var dy = y - MINI_VIS.lastY;
+
+    if (HTML.getAttribute('data-llc-overlay') === 'on'){
+      resetMiniVisibility();
+      return;
+    }
+
+    if (y <= 10){
+      resetMiniVisibility();
+      return;
+    }
+
+    if (Math.abs(dy) < 2){
+      MINI_VIS.lastY = y;
+      return;
+    }
+
+    if (dy > 0){
+      MINI_VIS.downAccum += dy;
+      MINI_VIS.upAccum = 0;
+      if (y > MINI_BASE_H && MINI_VIS.downAccum > 18){
+        setMiniHidden(true);
+      }
+    } else {
+      MINI_VIS.upAccum += Math.abs(dy);
+      MINI_VIS.downAccum = 0;
+      if (MINI_VIS.upAccum > 12){
+        setMiniHidden(false);
+      }
+    }
+
+    MINI_VIS.lastY = y;
+  }
+
   /* ---------------- Hoist/restore ---------------- */
   var SLOT_REG = new Map();
   function makePlaceholder(node){
@@ -318,7 +393,9 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
+      HTML.removeAttribute('data-llc-miniheader-hidden');
     } catch(_){}
+    try { resetMiniVisibility(); } catch(_){}
   }
 
   /* ---------------- Finders ---------------- */
@@ -466,12 +543,15 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         bar.classList.add('is-stuck','has-sides');
         HTML.setAttribute('data-llc-miniheader','on');
         updateMiniHeightVar();
+        updateMiniVisibilityOnScroll();
         return;
       }
 
       // Desktop: only content hoisting toggles now (bg already on miniheader)
       if (pastThreshold()) stickMiniDesktop();
       else                 stageMiniDesktop();
+
+      updateMiniVisibilityOnScroll();
     }
 
     function scroll(){
@@ -492,6 +572,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       restoreAll();
       markMainHeader();
       stealAndPaintBgNow();
+      resetMiniVisibility();
       update();
     }
 
@@ -514,14 +595,17 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       computeCarrypad();
       updateMiniHeightVar();
       stealAndPaintBgNow();
+      resetMiniVisibility();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
       stealAndPaintBgNow();
+      resetMiniVisibility();
     }, { passive:true });
 
     // Initial run
+    resetMiniVisibility();
     update();
   }
 
@@ -566,7 +650,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     return true;
   }
 
-  // -------------- Robust boot helper (waits for header) --------------  
+  // -------------- Robust boot helper (waits for header) --------------
   var __llcBootDone = false;
 
   function fullBoot(){
