@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.9-sticky-bg-steal+embed-container+miniportal-slot-bg-restore' };
+  window.__LLC_V31__ = { version: '31.8.10-sticky-bg-steal+embed-container+miniportal-anchor-fix' };
 
   var win  = window;
   var doc  = document;
@@ -96,8 +96,10 @@
 html[data-llc-miniheader-home-flow="1"] #llc-miniheader{
   position: relative !important;
   top: auto !important;
-  margin-top: 0 !important;
-  padding-top: 0 !important;
+  /* Keep the normal carrypad geometry so the mini-header sits at the
+     bottom of the full header and scrolls away with it on first load. */
+  margin-top: calc(var(--llc-carrypad, 0px) * -1) !important;
+  padding-top: var(--llc-carrypad, 0px) !important;
 }
 
 html[data-llc-overlay="on"] #llc-miniportal{
@@ -458,13 +460,15 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   function resetMiniFlow(){
     MINI_FLOW.lastY = currentScrollY();
     MINI_FLOW.headerBottom = headerDocBottom();
-    if (currentScrollY() <= MINI_FLOW.headerBottom) moveMiniHome();
-    else portalOff();
+    moveMiniHome();
   }
 
-  function startApproach(y){
+  function startApproach(){
     moveMiniToPortal();
-    portalSet('approach', y - miniHeight());
+    /* Expanding the placeholder can change scrollY because it sits above the
+       current viewport. Anchor after the DOM move so re-entry starts exactly
+       one mini-header height above the current viewport. */
+    portalSet('approach', currentScrollY() - miniHeight());
   }
 
   function startFixed(){
@@ -472,9 +476,11 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     portalSet('fixed', 0);
   }
 
-  function startExit(y){
+  function startExit(){
     moveMiniToPortal();
-    portalSet('exit', y);
+    /* Same idea as approach: calculate after the placeholder is active so
+       the exit position matches the real current viewport. */
+    portalSet('exit', currentScrollY());
   }
 
   function updateMiniPortalFlow(){
@@ -499,9 +505,9 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
 
     if (MINI_FLOW.state === 'home'){
-      if (dy < 0) startApproach(y);
+      if (dy < 0) startApproach();
       else {
-        portalOff();
+        moveMiniHome();
         return false;
       }
     }
@@ -510,14 +516,14 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       if (y <= MINI_FLOW.anchorTop){
         startFixed();
       } else if (dy > 0 && y >= MINI_FLOW.anchorTop + miniHeight()){
-        portalOff();
+        moveMiniHome();
         return false;
       }
       return true;
     }
 
     if (MINI_FLOW.state === 'fixed'){
-      if (dy > 0) startExit(y);
+      if (dy > 0) startExit();
       return true;
     }
 
@@ -525,7 +531,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       if (dy < 0 && y <= MINI_FLOW.anchorTop){
         startFixed();
       } else if (dy > 0 && y >= MINI_FLOW.anchorTop + miniHeight()){
-        portalOff();
+        moveMiniHome();
         return false;
       }
       return true;
@@ -730,6 +736,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         if (updateMiniPortalFlow()) return;
 
         // Below the real header region, the miniheader should be gone unless re-entering.
+        moveMiniHome();
         HTML.removeAttribute('data-llc-miniheader');
         if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = false;
         return;
