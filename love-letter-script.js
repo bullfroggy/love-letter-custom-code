@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.7-sticky-bg-steal+embed-container+miniportal-state-machine' };
+  window.__LLC_V31__ = { version: '31.8.8-sticky-bg-steal+embed-container+miniportal-reentry-natural-initial' };
 
   var win  = window;
   var doc  = document;
@@ -83,6 +83,15 @@
   padding-top: 0 !important;
   pointer-events: auto;
 }
+
+/* Initial/header-region mode: let the miniheader scroll with the full header naturally. */
+html[data-llc-miniheader-home-flow="1"] #llc-miniheader{
+  position: relative !important;
+  top: auto !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
 html[data-llc-overlay="on"] #llc-miniportal{
   z-index: 1 !important;
   pointer-events: none !important;
@@ -362,8 +371,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     portal.className = 'llc-portal-active';
     if (state === 'fixed') portal.className += ' llc-portal-fixed';
 
-    if (state === 'fixed') portal.style.top = '0px';
-    else portal.style.top = MINI_FLOW.anchorTop + 'px';
+    portal.style.top = (state === 'fixed') ? '0px' : (MINI_FLOW.anchorTop + 'px');
   }
 
   function portalOff(){
@@ -376,7 +384,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     MINI_FLOW.anchorTop = 0;
   }
 
-  function configureMiniContent(){
+  function configureFloatingDesktop(){
     var header = markMainHeader();
     var bar = ensureMiniBar();
     if (!header || !bar) return false;
@@ -385,23 +393,16 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     var center = bar.querySelector('.llc-mini-center');
     var right  = bar.querySelector('.llc-mini-right');
 
-    if (isDesktop()){
-      hoist('nav',   findDesktopNavContainer(header), center);
-      hoist('logo',  findLogo(header),                left);
-      hoist('order', findOrderContainer(header),      right);
-      hoist('icons', findIconsWrap(header),           right);
-      restoreKey('hamburger');
-    } else {
-      restoreKey('nav');
-      hoist('hamburger', findHamburger(header),      left);
-      hoist('logo',      findLogo(header),           center);
-      hoist('order',     findOrderContainer(header), right);
-      hoist('icons',     findIconsWrap(header),      right);
-    }
+    hoist('nav',   findDesktopNavContainer(header), center);
+    hoist('logo',  findLogo(header),                left);
+    hoist('order', findOrderContainer(header),      right);
+    hoist('icons', findIconsWrap(header),           right);
+    restoreKey('hamburger');
 
     bar.classList.add('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
-    if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = isDesktop();
+    HTML.removeAttribute('data-llc-miniheader-home-flow');
+    if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = true;
     updateMiniHeightVar();
     return true;
   }
@@ -409,7 +410,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   function moveMiniToPortal(){
     var portal = ensureMiniPortal();
     var bar = ensureMiniBar();
-    configureMiniContent();
+    configureFloatingDesktop();
     if (bar.parentNode !== portal) portal.appendChild(bar);
     return bar;
   }
@@ -422,6 +423,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       group.sp.parentNode.insertBefore(bar, group.sp.nextSibling);
     }
 
+    HTML.setAttribute('data-llc-miniheader-home-flow','1');
     portalOff();
     MINI_FLOW.lastY = currentScrollY();
   }
@@ -540,6 +542,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
+      HTML.removeAttribute('data-llc-miniheader-home-flow');
     } catch(_){}
   }
 
@@ -642,7 +645,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     ['logo','order','icons','hamburger'].forEach(restoreKey);
     bar.classList.remove('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
-    // desktop miniheader is not stuck in this mode
+    HTML.setAttribute('data-llc-miniheader-home-flow','1');
+    // desktop miniheader is intentionally in normal flow in the real header region
     window.__LLC_V31__.desktopStuck = false;
     updateMiniHeightVar();
   }
@@ -655,6 +659,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     hoist('icons', findIconsWrap(header),           right);
     bar.classList.add('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
+    HTML.removeAttribute('data-llc-miniheader-home-flow');
     // desktop miniheader has now entered stuck mode
     window.__LLC_V31__.desktopStuck = true;
     updateMiniHeightVar();
@@ -677,22 +682,12 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var y = currentScrollY();
       var hb = headerDocBottom();
 
-      if (y > hb){
-        if (updateMiniPortalFlow()) return;
-
-        // Below the real header region, the miniheader should be gone unless re-entering.
-        HTML.removeAttribute('data-llc-miniheader');
-        if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = false;
-        return;
-      }
-
-      // In the real header region, use the normal in-flow sticky header.
-      moveMiniHome();
-
       if (!mq.matches){
+        // Mobile: keep the original mobile miniheader behavior for now
         var group  = ensureMiniGroup();
         var bar    = group.bar;
         var header = markMainHeader();
+        HTML.removeAttribute('data-llc-miniheader-home-flow');
         if (header){
           hoist('hamburger', findHamburger(header),      bar.querySelector('.llc-mini-left'));
           hoist('logo',      findLogo(header),           bar.querySelector('.llc-mini-center'));
@@ -705,9 +700,18 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         return;
       }
 
-      // Desktop: only content hoisting toggles now (bg already on miniheader)
-      if (pastThreshold()) stickMiniDesktop();
-      else                 stageMiniDesktop();
+      if (y > hb){
+        if (updateMiniPortalFlow()) return;
+
+        // Below the real header region, the miniheader should be gone unless re-entering.
+        HTML.removeAttribute('data-llc-miniheader');
+        if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = false;
+        return;
+      }
+
+      // In the real header region, the full header and miniheader scroll out together.
+      moveMiniHome();
+      stageMiniDesktop();
     }
 
     function scroll(){
