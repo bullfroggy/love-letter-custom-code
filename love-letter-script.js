@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.6-sticky-bg-steal+embed-container+detached-mini-reentry' };
+  window.__LLC_V31__ = { version: '31.8.7-sticky-bg-steal+embed-container+miniportal-state-machine' };
 
   var win  = window;
   var doc  = document;
@@ -63,12 +63,14 @@
   left: 0;
   right: 0;
   top: 0;
-  z-index: 3;
-  pointer-events: none;
   display: none;
+  pointer-events: none;
+  z-index: 3;
 }
-#llc-miniportal.is-active{ display:block; }
-#llc-miniportal.is-fixed{
+#llc-miniportal.llc-portal-active{
+  display: block;
+}
+#llc-miniportal.llc-portal-fixed{
   position: fixed !important;
   top: 0 !important;
   left: 0;
@@ -77,10 +79,8 @@
 #llc-miniportal #llc-miniheader{
   position: relative !important;
   top: 0 !important;
-  padding-top: 0 !important;
   margin-top: 0 !important;
-  width: calc(100% + 16px) !important;
-  margin-left: -8px;
+  padding-top: 0 !important;
   pointer-events: auto;
 }
 html[data-llc-overlay="on"] #llc-miniportal{
@@ -331,148 +331,178 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
   }
 
-  var MINI_PORTAL = { mode: 'home', top: 0, lastY: 0 };
+  var MINI_FLOW = {
+    state: 'home',
+    lastY: 0,
+    anchorTop: 0,
+    headerBottom: 0
+  };
 
   function currentScrollY(){
     return Math.max(0, win.scrollY || win.pageYOffset || 0);
   }
 
-  function getMiniHeight(){
+  function miniHeight(){
     var raw = parseFloat(getComputedStyle(HTML).getPropertyValue('--llc-mini-h'));
     return Math.max(1, Math.round(raw || updateMiniHeightVar() || MINI_BASE_H));
   }
 
-  function getHeaderDocBottom(){
+  function headerDocBottom(){
     var header = markMainHeader();
     if (!header) return 0;
-    var r = header.getBoundingClientRect();
-    return currentScrollY() + r.bottom;
+    var rect = header.getBoundingClientRect();
+    return Math.max(0, Math.round(currentScrollY() + (rect.bottom || 0)));
   }
 
-  function resetDetachedState(){
-    MINI_PORTAL.lastY = currentScrollY();
+  function portalSet(state, topPx){
+    var portal = ensureMiniPortal();
+    MINI_FLOW.state = state;
+    MINI_FLOW.anchorTop = Math.round(topPx || 0);
+
+    portal.className = 'llc-portal-active';
+    if (state === 'fixed') portal.className += ' llc-portal-fixed';
+
+    if (state === 'fixed') portal.style.top = '0px';
+    else portal.style.top = MINI_FLOW.anchorTop + 'px';
   }
 
-  function configureFloatingDesktop(){
+  function portalOff(){
+    var portal = doc.getElementById('llc-miniportal');
+    if (portal){
+      portal.className = '';
+      portal.style.top = '0px';
+    }
+    MINI_FLOW.state = 'home';
+    MINI_FLOW.anchorTop = 0;
+  }
+
+  function configureMiniContent(){
     var header = markMainHeader();
     var bar = ensureMiniBar();
-    if (!header || !bar) return;
+    if (!header || !bar) return false;
 
     var left   = bar.querySelector('.llc-mini-left');
     var center = bar.querySelector('.llc-mini-center');
     var right  = bar.querySelector('.llc-mini-right');
 
-    hoist('nav',   findDesktopNavContainer(header), center);
-    hoist('logo',  findLogo(header),                left);
-    hoist('order', findOrderContainer(header),      right);
-    hoist('icons', findIconsWrap(header),           right);
+    if (isDesktop()){
+      hoist('nav',   findDesktopNavContainer(header), center);
+      hoist('logo',  findLogo(header),                left);
+      hoist('order', findOrderContainer(header),      right);
+      hoist('icons', findIconsWrap(header),           right);
+      restoreKey('hamburger');
+    } else {
+      restoreKey('nav');
+      hoist('hamburger', findHamburger(header),      left);
+      hoist('logo',      findLogo(header),           center);
+      hoist('order',     findOrderContainer(header), right);
+      hoist('icons',     findIconsWrap(header),      right);
+    }
 
     bar.classList.add('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
-    window.__LLC_V31__.desktopStuck = true;
+    if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = isDesktop();
     updateMiniHeightVar();
+    return true;
   }
 
-  function ensureMiniHome(){
-    var group = ensureMiniGroup();
+  function moveMiniToPortal(){
     var portal = ensureMiniPortal();
-    var bar = group.bar;
+    var bar = ensureMiniBar();
+    configureMiniContent();
+    if (bar.parentNode !== portal) portal.appendChild(bar);
+    return bar;
+  }
 
-    if (bar.parentNode !== group.bar.parentNode || bar.parentNode !== group.sp.parentNode){
-      /* no-op: existence guard for older browsers */
-    }
+  function moveMiniHome(){
+    var group = ensureMiniGroup();
+    var bar = ensureMiniBar();
+
     if (bar.parentNode !== group.sp.parentNode || bar.previousSibling !== group.sp){
       group.sp.parentNode.insertBefore(bar, group.sp.nextSibling);
     }
 
-    portal.className = '';
-    portal.style.top = '0px';
-    MINI_PORTAL.mode = 'home';
-    MINI_PORTAL.top = 0;
-    MINI_PORTAL.lastY = currentScrollY();
+    portalOff();
+    MINI_FLOW.lastY = currentScrollY();
   }
 
-  function activatePortal(mode, docTop){
-    var portal = ensureMiniPortal();
-    var bar = ensureMiniBar();
-
-    configureFloatingDesktop();
-    if (bar.parentNode !== portal) portal.appendChild(bar);
-
-    portal.className = 'is-active' + (mode === 'fixed' ? ' is-fixed' : '');
-    portal.style.top = (mode === 'fixed') ? '0px' : (Math.round(docTop) + 'px');
-
-    MINI_PORTAL.mode = mode;
-    MINI_PORTAL.top = Math.round(docTop || 0);
-    MINI_PORTAL.lastY = currentScrollY();
+  function resetMiniFlow(){
+    MINI_FLOW.lastY = currentScrollY();
+    MINI_FLOW.headerBottom = headerDocBottom();
+    if (currentScrollY() <= MINI_FLOW.headerBottom) moveMiniHome();
+    else portalOff();
   }
 
-  function startDetachedApproach(){
-    activatePortal('approach', currentScrollY() - getMiniHeight());
+  function startApproach(y){
+    moveMiniToPortal();
+    portalSet('approach', y - miniHeight());
   }
 
-  function startDetachedFixed(){
-    activatePortal('fixed', 0);
+  function startFixed(){
+    moveMiniToPortal();
+    portalSet('fixed', 0);
   }
 
-  function startDetachedExit(){
-    activatePortal('exit', currentScrollY());
+  function startExit(y){
+    moveMiniToPortal();
+    portalSet('exit', y);
   }
 
-  function updateDetachedDesktop(headerBottom){
+  function updateMiniPortalFlow(){
     var y = currentScrollY();
-    var dy = y - MINI_PORTAL.lastY;
-    MINI_PORTAL.lastY = y;
+    var dy = y - MINI_FLOW.lastY;
+    MINI_FLOW.lastY = y;
 
-    if (y <= headerBottom){
-      ensureMiniHome();
+    var hb = headerDocBottom();
+    MINI_FLOW.headerBottom = hb;
+
+    if (HTML.getAttribute('data-llc-overlay') === 'on'){
       return false;
     }
 
-    if (Math.abs(dy) < 2){
-      return MINI_PORTAL.mode !== 'home';
-    }
-
-    if (MINI_PORTAL.mode === 'home'){
-      if (dy < 0){
-        startDetachedApproach();
-        return true;
-      }
+    if (y <= hb){
+      moveMiniHome();
       return false;
     }
 
-    if (MINI_PORTAL.mode === 'approach'){
-      if (y <= MINI_PORTAL.top){
-        startDetachedFixed();
-        return true;
+    if (Math.abs(dy) < 1){
+      return MINI_FLOW.state !== 'home';
+    }
+
+    if (MINI_FLOW.state === 'home'){
+      if (dy < 0) startApproach(y);
+      else {
+        portalOff();
+        return false;
       }
-      if (dy > 0 && y >= MINI_PORTAL.top + getMiniHeight()){
-        ensureMiniHome();
+    }
+
+    if (MINI_FLOW.state === 'approach'){
+      if (y <= MINI_FLOW.anchorTop){
+        startFixed();
+      } else if (dy > 0 && y >= MINI_FLOW.anchorTop + miniHeight()){
+        portalOff();
         return false;
       }
       return true;
     }
 
-    if (MINI_PORTAL.mode === 'fixed'){
-      if (dy > 0){
-        startDetachedExit();
-      }
+    if (MINI_FLOW.state === 'fixed'){
+      if (dy > 0) startExit(y);
       return true;
     }
 
-    if (MINI_PORTAL.mode === 'exit'){
-      if (dy < 0 && y <= MINI_PORTAL.top){
-        startDetachedFixed();
-        return true;
-      }
-      if (y >= MINI_PORTAL.top + getMiniHeight()){
-        ensureMiniHome();
+    if (MINI_FLOW.state === 'exit'){
+      if (dy < 0 && y <= MINI_FLOW.anchorTop){
+        startFixed();
+      } else if (dy > 0 && y >= MINI_FLOW.anchorTop + miniHeight()){
+        portalOff();
         return false;
       }
       return true;
     }
 
-    return false;
+    return MINI_FLOW.state !== 'home';
   }
 
   /* ---------------- Hoist/restore ---------------- */
@@ -506,9 +536,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   function restoreHeaderToFull(){
     try { restoreAll(); } catch(_){}
     try {
-      var portal = doc.getElementById('llc-miniportal');
-      if (portal) { portal.className = ''; portal.style.top = '0px'; }
-      ensureMiniHome();
+      moveMiniHome();
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
@@ -646,8 +674,22 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     function update(){
       raf = 0;
 
+      var y = currentScrollY();
+      var hb = headerDocBottom();
+
+      if (y > hb){
+        if (updateMiniPortalFlow()) return;
+
+        // Below the real header region, the miniheader should be gone unless re-entering.
+        HTML.removeAttribute('data-llc-miniheader');
+        if (window.__LLC_V31__) window.__LLC_V31__.desktopStuck = false;
+        return;
+      }
+
+      // In the real header region, use the normal in-flow sticky header.
+      moveMiniHome();
+
       if (!mq.matches){
-        // Mobile: keep existing behavior
         var group  = ensureMiniGroup();
         var bar    = group.bar;
         var header = markMainHeader();
@@ -663,22 +705,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         return;
       }
 
-      var y = currentScrollY();
-      var headerBottom = getHeaderDocBottom();
-
-      if (y > headerBottom){
-        if (updateDetachedDesktop(headerBottom)){
-          return;
-        }
-        // Below the header region and not detached: leave the miniheader home and hidden with the main header.
-        HTML.removeAttribute('data-llc-miniheader');
-        window.__LLC_V31__.desktopStuck = false;
-        return;
-      }
-
-      ensureMiniHome();
-
-      // Within the header region, keep existing staged/stuck behavior
+      // Desktop: only content hoisting toggles now (bg already on miniheader)
       if (pastThreshold()) stickMiniDesktop();
       else                 stageMiniDesktop();
     }
@@ -699,8 +726,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
       computeCarrypad();
       restoreAll();
-      ensureMiniHome();
-      resetDetachedState();
+      resetMiniFlow();
       markMainHeader();
       stealAndPaintBgNow();
       update();
@@ -724,18 +750,18 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      resetDetachedState();
+      resetMiniFlow();
       stealAndPaintBgNow();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
-      resetDetachedState();
+      resetMiniFlow();
       stealAndPaintBgNow();
     }, { passive:true });
 
     // Initial run
-    resetDetachedState();
+    resetMiniFlow();
     update();
   }
 
@@ -880,6 +906,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
     // Update home flag for the new route
     updateHomeFlag();
+    try { resetMiniFlow(); } catch(_){}
 
     // DESKTOP: if miniheader was stuck, restore immediately
     if (isDesktop() && miniHeaderWasStuck()) {
