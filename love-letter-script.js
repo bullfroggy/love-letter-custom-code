@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+step1-hide-embed' };
+  window.__LLC_V31__ = { version: '31.8.5-sticky-bg-steal+embed-container+scroll-linked-mini' };
 
   var win  = window;
   var doc  = document;
@@ -97,6 +97,8 @@ html[data-llc-overlay="on"] .w-block-wrapper[data-block-purpose="footer"]{
   z-index: 3;
   isolation: isolate;
   background-position: var(--bg-position, 50% 50%);
+  transform: translateY(calc(-1 * var(--llc-mini-slide, 0px)));
+  will-change: transform;
 }
 #llc-miniheader.is-stuck{}
 html[data-llc-overlay="on"] #llc-miniheader{ z-index: 1 !important; box-shadow: none !important; }
@@ -213,7 +215,6 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
   header[data-llc-mainheader]{ display:none !important; }
 }
 
-/* home tweak via html flag */
 /* Remove default section padding inside embed-code blocks */
 [class^="embed-code-"] .container,
 [class*=" embed-code-"] .container{
@@ -223,16 +224,7 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
   padding-bottom: 0 !important;
 }
 
-/* Miniheader hide/show on scroll */
-#llc-miniheader{
-  transform: translateY(0);
-  transition: transform .22s ease;
-  will-change: transform;
-}
-html[data-llc-miniheader-hidden="1"] #llc-miniheader{
-  transform: translateY(calc(-1 * var(--llc-mini-h, 57px)));
-}
-
+/* home tweak via html flag */
 html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 `;
     onceStyle('llc-v31-styles', css);
@@ -303,61 +295,44 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
   }
 
-  var MINI_VIS = { lastY: 0, downAccum: 0, upAccum: 0, hidden: false };
+  var MINI_VIS = { lastY: 0, hiddenPx: 0 };
 
   function currentScrollY(){
     return Math.max(0, win.scrollY || win.pageYOffset || 0);
   }
 
-  function setMiniHidden(hidden){
-    hidden = !!hidden;
-    MINI_VIS.hidden = hidden;
-    if (hidden) HTML.setAttribute('data-llc-miniheader-hidden','1');
-    else HTML.removeAttribute('data-llc-miniheader-hidden');
+  function getMiniHeight(){
+    var raw = parseFloat(getComputedStyle(HTML).getPropertyValue('--llc-mini-h'));
+    return Math.max(1, Math.round(raw || updateMiniHeightVar() || MINI_BASE_H));
+  }
+
+  function setMiniSlide(px){
+    var h = getMiniHeight();
+    var next = Math.max(0, Math.min(h, px || 0));
+    MINI_VIS.hiddenPx = next;
+    HTML.style.setProperty('--llc-mini-slide', next + 'px');
   }
 
   function resetMiniVisibility(){
     MINI_VIS.lastY = currentScrollY();
-    MINI_VIS.downAccum = 0;
-    MINI_VIS.upAccum = 0;
-    setMiniHidden(false);
+    setMiniSlide(0);
   }
 
-  function updateMiniVisibilityOnScroll(){
+  function updateMiniVisibilityOnScroll(active){
     var y = currentScrollY();
     var dy = y - MINI_VIS.lastY;
-
-    if (HTML.getAttribute('data-llc-overlay') === 'on'){
-      resetMiniVisibility();
-      return;
-    }
-
-    if (y <= 10){
-      resetMiniVisibility();
-      return;
-    }
-
-    if (Math.abs(dy) < 2){
-      MINI_VIS.lastY = y;
-      return;
-    }
-
-    if (dy > 0){
-      MINI_VIS.downAccum += dy;
-      MINI_VIS.upAccum = 0;
-      if (y > MINI_BASE_H && MINI_VIS.downAccum > 18){
-        setMiniHidden(true);
-      }
-    } else {
-      MINI_VIS.upAccum += Math.abs(dy);
-      MINI_VIS.downAccum = 0;
-      if (MINI_VIS.upAccum > 12){
-        setMiniHidden(false);
-      }
-    }
-
     MINI_VIS.lastY = y;
+
+    if (!active || HTML.getAttribute('data-llc-overlay') === 'on' || y <= 10){
+      setMiniSlide(0);
+      return;
+    }
+
+    if (Math.abs(dy) < 1) return;
+
+    setMiniSlide(MINI_VIS.hiddenPx + dy);
   }
+
 
   /* ---------------- Hoist/restore ---------------- */
   var SLOT_REG = new Map();
@@ -393,7 +368,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
-      HTML.removeAttribute('data-llc-miniheader-hidden');
     } catch(_){}
     try { resetMiniVisibility(); } catch(_){}
   }
@@ -543,15 +517,17 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         bar.classList.add('is-stuck','has-sides');
         HTML.setAttribute('data-llc-miniheader','on');
         updateMiniHeightVar();
-        updateMiniVisibilityOnScroll();
+        updateMiniVisibilityOnScroll(true);
         return;
       }
 
-      // Desktop: only content hoisting toggles now (bg already on miniheader)
-      if (pastThreshold()) stickMiniDesktop();
-      else                 stageMiniDesktop();
+      var activeDesktop = pastThreshold();
 
-      updateMiniVisibilityOnScroll();
+      // Desktop: only content hoisting toggles now (bg already on miniheader)
+      if (activeDesktop) stickMiniDesktop();
+      else               stageMiniDesktop();
+
+      updateMiniVisibilityOnScroll(activeDesktop);
     }
 
     function scroll(){
@@ -650,7 +626,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     return true;
   }
 
-  // -------------- Robust boot helper (waits for header) --------------
+  // -------------- Robust boot helper (waits for header) --------------  
   var __llcBootDone = false;
 
   function fullBoot(){
