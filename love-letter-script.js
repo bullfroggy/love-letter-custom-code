@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.8-sticky-bg-steal+embed-container+miniportal-reentry-natural-initial' };
+  window.__LLC_V31__ = { version: '31.8.9-sticky-bg-steal+embed-container+miniportal-slot-bg-restore' };
 
   var win  = window;
   var doc  = document;
@@ -56,6 +56,14 @@
   pointer-events: none !important;
   width: 100% !important;
   display: block !important;
+}
+
+#llc-mini-slot{
+  height: 0;
+  pointer-events: none !important;
+  width: 100% !important;
+  display: block !important;
+  flex: 0 0 auto;
 }
 
 #llc-miniportal{
@@ -293,18 +301,35 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     doc.body.appendChild(portal);
     return portal;
   }
+  function ensureMiniSlot(){
+    var slot = doc.getElementById('llc-mini-slot');
+    if (slot) return slot;
+    slot = doc.createElement('div');
+    slot.id = 'llc-mini-slot';
+    return slot;
+  }
+  function setMiniSlotHeight(active){
+    var slot = ensureMiniSlot();
+    var h = active ? miniHeight() : 0;
+    slot.style.height = h + 'px';
+  }
   function ensureMiniGroup(){
-    var bar = ensureMiniBar();
-    var sp  = ensureSpacer();
+    var bar  = ensureMiniBar();
+    var sp   = ensureSpacer();
+    var slot = ensureMiniSlot();
     var mainHeader = getFirstHeader();
+
     if (mainHeader && mainHeader.parentNode){
       if (sp.parentNode !== mainHeader.parentNode) mainHeader.parentNode.insertBefore(sp, mainHeader);
       if (bar.parentNode !== mainHeader.parentNode || bar.previousSibling !== sp) mainHeader.parentNode.insertBefore(bar, mainHeader);
+      if (slot.parentNode !== mainHeader.parentNode || slot.previousSibling !== bar) mainHeader.parentNode.insertBefore(slot, mainHeader);
     } else {
       if (!sp.parentNode) doc.body.appendChild(sp);
       if (!bar.parentNode) doc.body.appendChild(bar);
+      if (!slot.parentNode) doc.body.appendChild(slot);
     }
-    return { bar, sp };
+
+    return { bar: bar, sp: sp, slot: slot };
   }
 
   /* ---------------- Size / carrypad ---------------- */
@@ -411,6 +436,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     var portal = ensureMiniPortal();
     var bar = ensureMiniBar();
     configureFloatingDesktop();
+    setMiniSlotHeight(true);
     if (bar.parentNode !== portal) portal.appendChild(bar);
     return bar;
   }
@@ -419,10 +445,11 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     var group = ensureMiniGroup();
     var bar = ensureMiniBar();
 
-    if (bar.parentNode !== group.sp.parentNode || bar.previousSibling !== group.sp){
-      group.sp.parentNode.insertBefore(bar, group.sp.nextSibling);
+    if (bar.parentNode !== group.sp.parentNode || bar.nextSibling !== group.slot){
+      group.sp.parentNode.insertBefore(bar, group.slot);
     }
 
+    setMiniSlotHeight(false);
     HTML.setAttribute('data-llc-miniheader-home-flow','1');
     portalOff();
     MINI_FLOW.lastY = currentScrollY();
@@ -539,6 +566,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     try { restoreAll(); } catch(_){}
     try {
       moveMiniHome();
+      setMiniSlotHeight(false);
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
@@ -604,11 +632,9 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
   }
   function clearHeaderBg(){
-    var header = getFirstHeader();
-    if (!header) return;
-    var bgEl = getHeaderBgElement(header);
-    bgEl.style.backgroundImage = 'none';
-    bgEl.style.backgroundColor = 'transparent';
+    // The mini-header still copies the main header background, but the main header
+    // should keep its own background so the full header does not visually disappear.
+    return;
   }
 
   // Local retry (up to ~3 frames) instead of global counters
