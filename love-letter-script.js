@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+step1-hide-embed' };
+  window.__LLC_V31__ = { version: '31.8.4-sticky-bg-steal+step1-hide-embed+embed-container-padding-fix' };
 
   var win  = window;
   var doc  = document;
@@ -211,6 +211,15 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
 /* Mobile header presence */
 @media (max-width:839px){
   header[data-llc-mainheader]{ display:none !important; }
+}
+
+/* Remove default section padding inside embed-code blocks */
+[class^="embed-code-"] .container,
+[class*=" embed-code-"] .container{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 /* home tweak via html flag */
