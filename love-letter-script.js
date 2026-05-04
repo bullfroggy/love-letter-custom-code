@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.10-sticky-bg-steal+embed-container+miniportal-anchor-fix' };
+  window.__LLC_V31__ = { version: '31.8.12-sticky-bg-steal+embed-container+slot-owned-miniportal-zfix' };
 
   var win  = window;
   var doc  = document;
@@ -59,11 +59,19 @@
 }
 
 #llc-mini-slot{
-  height: 0;
+  height: auto;
   pointer-events: none !important;
   width: 100% !important;
   display: block !important;
   flex: 0 0 auto;
+  position: relative;
+  z-index: calc(var(--z-index-header, 1000) + 2);
+  isolation: isolate;
+  overflow: visible;
+}
+#llc-mini-slot > #llc-miniheader{
+  pointer-events: auto;
+  z-index: calc(var(--z-index-header, 1000) + 3) !important;
 }
 
 #llc-miniportal{
@@ -96,10 +104,9 @@
 html[data-llc-miniheader-home-flow="1"] #llc-miniheader{
   position: relative !important;
   top: auto !important;
-  /* Keep the normal carrypad geometry so the mini-header sits at the
-     bottom of the full header and scrolls away with it on first load. */
-  margin-top: calc(var(--llc-carrypad, 0px) * -1) !important;
-  padding-top: var(--llc-carrypad, 0px) !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  z-index: calc(var(--z-index-header, 1000) + 3) !important;
 }
 
 html[data-llc-overlay="on"] #llc-miniportal{
@@ -181,7 +188,14 @@ header[data-llc-mainheader] .header__icons{ display:flex; align-items:center; ga
 header[data-llc-mainheader] .header__icons .w-wrapper{ margin:0 !important; }
 header[data-llc-mainheader] .header__account{ margin-right:0 !important; }
 header[data-llc-mainheader] .header__cart button{ padding:1px 6px !important; display:inline-flex; align-items:center; justify-content:center; line-height:1; }
-header[data-llc-mainheader]{ position: absolute; width: calc(100% - 16px) !important; }
+header[data-llc-mainheader]{
+  position: absolute;
+  width: calc(100% - 16px) !important;
+  z-index: var(--z-index-header, 1000);
+}
+html[data-llc-miniheader-home-flow="1"] header[data-llc-mainheader]{
+  z-index: var(--z-index-header, 1000);
+}
 
 /* Click layering */
 html[data-llc-miniheader="on"] header[data-llc-mainheader]{ pointer-events: none; }
@@ -312,8 +326,13 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   }
   function setMiniSlotHeight(active){
     var slot = ensureMiniSlot();
-    var h = active ? miniHeight() : 0;
-    slot.style.height = h + 'px';
+    if (active){
+      var bar = ensureMiniBar();
+      var h = Math.max(1, Math.round((bar.getBoundingClientRect && bar.getBoundingClientRect().height) || miniHeight()));
+      slot.style.height = h + 'px';
+    } else {
+      slot.style.removeProperty('height');
+    }
   }
   function ensureMiniGroup(){
     var bar  = ensureMiniBar();
@@ -323,12 +342,12 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
     if (mainHeader && mainHeader.parentNode){
       if (sp.parentNode !== mainHeader.parentNode) mainHeader.parentNode.insertBefore(sp, mainHeader);
-      if (bar.parentNode !== mainHeader.parentNode || bar.previousSibling !== sp) mainHeader.parentNode.insertBefore(bar, mainHeader);
-      if (slot.parentNode !== mainHeader.parentNode || slot.previousSibling !== bar) mainHeader.parentNode.insertBefore(slot, mainHeader);
+      if (slot.parentNode !== mainHeader.parentNode || slot.previousSibling !== sp) mainHeader.parentNode.insertBefore(slot, mainHeader);
+      if (bar.parentNode !== slot) slot.appendChild(bar);
     } else {
       if (!sp.parentNode) doc.body.appendChild(sp);
-      if (!bar.parentNode) doc.body.appendChild(bar);
       if (!slot.parentNode) doc.body.appendChild(slot);
+      if (bar.parentNode !== slot) slot.appendChild(bar);
     }
 
     return { bar: bar, sp: sp, slot: slot };
@@ -435,10 +454,16 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   }
 
   function moveMiniToPortal(){
+    var group = ensureMiniGroup();
     var portal = ensureMiniPortal();
     var bar = ensureMiniBar();
+
     configureFloatingDesktop();
+
+    // The slot owns the bar in normal flow. Lock its current height before
+    // moving the bar to the portal, so moving the DOM node does not change layout.
     setMiniSlotHeight(true);
+
     if (bar.parentNode !== portal) portal.appendChild(bar);
     return bar;
   }
@@ -447,13 +472,13 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     var group = ensureMiniGroup();
     var bar = ensureMiniBar();
 
-    if (bar.parentNode !== group.sp.parentNode || bar.nextSibling !== group.slot){
-      group.sp.parentNode.insertBefore(bar, group.slot);
+    if (bar.parentNode !== group.slot){
+      group.slot.appendChild(bar);
     }
 
-    setMiniSlotHeight(false);
     HTML.setAttribute('data-llc-miniheader-home-flow','1');
     portalOff();
+    setMiniSlotHeight(false);
     MINI_FLOW.lastY = currentScrollY();
   }
 
@@ -465,9 +490,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
   function startApproach(){
     moveMiniToPortal();
-    /* Expanding the placeholder can change scrollY because it sits above the
-       current viewport. Anchor after the DOM move so re-entry starts exactly
-       one mini-header height above the current viewport. */
     portalSet('approach', currentScrollY() - miniHeight());
   }
 
@@ -478,8 +500,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
   function startExit(){
     moveMiniToPortal();
-    /* Same idea as approach: calculate after the placeholder is active so
-       the exit position matches the real current viewport. */
     portalSet('exit', currentScrollY());
   }
 
