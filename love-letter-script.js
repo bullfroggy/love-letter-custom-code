@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.5-sticky-bg-steal+embed-container+scroll-linked-mini' };
+  window.__LLC_V31__ = { version: '31.8.6-sticky-bg-steal+embed-container+class-toggle-mini' };
 
   var win  = window;
   var doc  = document;
@@ -97,8 +97,6 @@ html[data-llc-overlay="on"] .w-block-wrapper[data-block-purpose="footer"]{
   z-index: 3;
   isolation: isolate;
   background-position: var(--bg-position, 50% 50%);
-  transform: translateY(calc(-1 * var(--llc-mini-slide, 0px)));
-  will-change: transform;
 }
 #llc-miniheader.is-stuck{}
 html[data-llc-overlay="on"] #llc-miniheader{ z-index: 1 !important; box-shadow: none !important; }
@@ -224,6 +222,23 @@ html[data-llc-miniheader="on"] header[data-llc-mainheader] .w-nav{ pointer-event
   padding-bottom: 0 !important;
 }
 
+/* Miniheader directional states */
+#llc-miniheader{
+  transform: translateY(0);
+  transition: transform .18s linear;
+  will-change: transform;
+}
+
+html[data-llc-miniheader-phase="stuck"][data-llc-miniheader-dir="down"] #llc-miniheader{
+  transform: translateY(calc(-1 * var(--llc-mini-h, 57px)));
+}
+
+html[data-llc-miniheader-phase="stuck"][data-llc-miniheader-dir="up"] #llc-miniheader,
+html[data-llc-miniheader-phase="stuck"]:not([data-llc-miniheader-dir]) #llc-miniheader,
+html[data-llc-miniheader-phase="staged"] #llc-miniheader{
+  transform: translateY(0);
+}
+
 /* home tweak via html flag */
 html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 `;
@@ -295,27 +310,25 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
   }
 
-  var MINI_VIS = { lastY: 0, hiddenPx: 0 };
+  var MINI_VIS = { lastY: 0 };
 
   function currentScrollY(){
     return Math.max(0, win.scrollY || win.pageYOffset || 0);
   }
 
-  function getMiniHeight(){
-    var raw = parseFloat(getComputedStyle(HTML).getPropertyValue('--llc-mini-h'));
-    return Math.max(1, Math.round(raw || updateMiniHeightVar() || MINI_BASE_H));
+  function setMiniPhase(phase){
+    if (phase) HTML.setAttribute('data-llc-miniheader-phase', phase);
+    else HTML.removeAttribute('data-llc-miniheader-phase');
   }
 
-  function setMiniSlide(px){
-    var h = getMiniHeight();
-    var next = Math.max(0, Math.min(h, px || 0));
-    MINI_VIS.hiddenPx = next;
-    HTML.style.setProperty('--llc-mini-slide', next + 'px');
+  function setMiniDir(dir){
+    if (dir) HTML.setAttribute('data-llc-miniheader-dir', dir);
+    else HTML.removeAttribute('data-llc-miniheader-dir');
   }
 
   function resetMiniVisibility(){
     MINI_VIS.lastY = currentScrollY();
-    setMiniSlide(0);
+    setMiniDir('up');
   }
 
   function updateMiniVisibilityOnScroll(active){
@@ -324,15 +337,14 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     MINI_VIS.lastY = y;
 
     if (!active || HTML.getAttribute('data-llc-overlay') === 'on' || y <= 10){
-      setMiniSlide(0);
+      setMiniDir('up');
       return;
     }
 
-    if (Math.abs(dy) < 1) return;
+    if (Math.abs(dy) < 2) return;
 
-    setMiniSlide(MINI_VIS.hiddenPx + dy);
+    setMiniDir(dy > 0 ? 'down' : 'up');
   }
-
 
   /* ---------------- Hoist/restore ---------------- */
   var SLOT_REG = new Map();
@@ -368,6 +380,8 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
+      HTML.removeAttribute('data-llc-miniheader-phase');
+      HTML.removeAttribute('data-llc-miniheader-dir');
     } catch(_){}
     try { resetMiniVisibility(); } catch(_){}
   }
@@ -471,6 +485,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     ['logo','order','icons','hamburger'].forEach(restoreKey);
     bar.classList.remove('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
+    setMiniPhase('staged');
     // desktop miniheader is not stuck in this mode
     window.__LLC_V31__.desktopStuck = false;
     updateMiniHeightVar();
@@ -484,6 +499,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     hoist('icons', findIconsWrap(header),           right);
     bar.classList.add('is-stuck','has-sides');
     HTML.setAttribute('data-llc-miniheader','on');
+    setMiniPhase('stuck');
     // desktop miniheader has now entered stuck mode
     window.__LLC_V31__.desktopStuck = true;
     updateMiniHeightVar();
@@ -504,7 +520,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       raf = 0;
 
       if (!mq.matches){
-        // Mobile: painted from the start, hoist everything (no full nav)
         var group  = ensureMiniGroup();
         var bar    = group.bar;
         var header = markMainHeader();
@@ -516,6 +531,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         }
         bar.classList.add('is-stuck','has-sides');
         HTML.setAttribute('data-llc-miniheader','on');
+        setMiniPhase('stuck');
         updateMiniHeightVar();
         updateMiniVisibilityOnScroll(true);
         return;
@@ -523,7 +539,6 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
       var activeDesktop = pastThreshold();
 
-      // Desktop: only content hoisting toggles now (bg already on miniheader)
       if (activeDesktop) stickMiniDesktop();
       else               stageMiniDesktop();
 
