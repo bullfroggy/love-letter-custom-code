@@ -6,7 +6,7 @@
     return;
   }
 
-  window.__LLC_V31__ = { version: '31.8.6-sticky-bg-steal+embed-container+natural-mini-scroll' };
+  window.__LLC_V31__ = { version: '31.8.6-sticky-bg-steal+embed-container+detached-mini-reentry' };
 
   var win  = window;
   var doc  = document;
@@ -58,6 +58,36 @@
   display: block !important;
 }
 
+#llc-miniportal{
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: none;
+}
+#llc-miniportal.is-active{ display:block; }
+#llc-miniportal.is-fixed{
+  position: fixed !important;
+  top: 0 !important;
+  left: 0;
+  right: 0;
+}
+#llc-miniportal #llc-miniheader{
+  position: relative !important;
+  top: 0 !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+  width: calc(100% + 16px) !important;
+  margin-left: -8px;
+  pointer-events: auto;
+}
+html[data-llc-overlay="on"] #llc-miniportal{
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
 html, body{ overflow-x: clip; }
 
 /* keep footer shadow; header bg shadow is removed once miniheader is active */
@@ -97,8 +127,6 @@ html[data-llc-overlay="on"] .w-block-wrapper[data-block-purpose="footer"]{
   z-index: 3;
   isolation: isolate;
   background-position: var(--bg-position, 50% 50%);
-  transform: translateY(calc(-1 * var(--llc-mini-slide, 0px)));
-  will-change: transform;
 }
 #llc-miniheader.is-stuck{}
 html[data-llc-overlay="on"] #llc-miniheader{ z-index: 1 !important; box-shadow: none !important; }
@@ -248,6 +276,14 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     bar.innerHTML = '<div class="llc-mini-left"></div><div class="llc-mini-center"></div><div class="llc-mini-right"></div>';
     return bar;
   }
+  function ensureMiniPortal(){
+    var portal = doc.getElementById('llc-miniportal');
+    if (portal) return portal;
+    portal = doc.createElement('div');
+    portal.id = 'llc-miniportal';
+    doc.body.appendChild(portal);
+    return portal;
+  }
   function ensureMiniGroup(){
     var bar = ensureMiniBar();
     var sp  = ensureSpacer();
@@ -295,7 +331,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     }
   }
 
-  var MINI_VIS = { lastY: 0, slide: 0 };
+  var MINI_PORTAL = { mode: 'home', top: 0, lastY: 0 };
 
   function currentScrollY(){
     return Math.max(0, win.scrollY || win.pageYOffset || 0);
@@ -306,33 +342,138 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     return Math.max(1, Math.round(raw || updateMiniHeightVar() || MINI_BASE_H));
   }
 
-  function setMiniSlide(px){
-    var h = getMiniHeight();
-    var next = Math.max(0, Math.min(h, px || 0));
-    MINI_VIS.slide = next;
-    HTML.style.setProperty('--llc-mini-slide', next + 'px');
+  function getHeaderDocBottom(){
+    var header = markMainHeader();
+    if (!header) return 0;
+    var r = header.getBoundingClientRect();
+    return currentScrollY() + r.bottom;
   }
 
-  function resetMiniVisibility(){
-    MINI_VIS.lastY = currentScrollY();
-    setMiniSlide(0);
+  function resetDetachedState(){
+    MINI_PORTAL.lastY = currentScrollY();
   }
 
-  function updateMiniVisibilityOnScroll(active){
-    var y = currentScrollY();
-    var dy = y - MINI_VIS.lastY;
-    MINI_VIS.lastY = y;
+  function configureFloatingDesktop(){
+    var header = markMainHeader();
+    var bar = ensureMiniBar();
+    if (!header || !bar) return;
 
-    if (!active || HTML.getAttribute('data-llc-overlay') === 'on' || y <= 10){
-      setMiniSlide(0);
-      return;
+    var left   = bar.querySelector('.llc-mini-left');
+    var center = bar.querySelector('.llc-mini-center');
+    var right  = bar.querySelector('.llc-mini-right');
+
+    hoist('nav',   findDesktopNavContainer(header), center);
+    hoist('logo',  findLogo(header),                left);
+    hoist('order', findOrderContainer(header),      right);
+    hoist('icons', findIconsWrap(header),           right);
+
+    bar.classList.add('is-stuck','has-sides');
+    HTML.setAttribute('data-llc-miniheader','on');
+    window.__LLC_V31__.desktopStuck = true;
+    updateMiniHeightVar();
+  }
+
+  function ensureMiniHome(){
+    var group = ensureMiniGroup();
+    var portal = ensureMiniPortal();
+    var bar = group.bar;
+
+    if (bar.parentNode !== group.bar.parentNode || bar.parentNode !== group.sp.parentNode){
+      /* no-op: existence guard for older browsers */
+    }
+    if (bar.parentNode !== group.sp.parentNode || bar.previousSibling !== group.sp){
+      group.sp.parentNode.insertBefore(bar, group.sp.nextSibling);
     }
 
-    if (Math.abs(dy) < 1) return;
-
-    setMiniSlide(MINI_VIS.slide + dy);
+    portal.className = '';
+    portal.style.top = '0px';
+    MINI_PORTAL.mode = 'home';
+    MINI_PORTAL.top = 0;
+    MINI_PORTAL.lastY = currentScrollY();
   }
 
+  function activatePortal(mode, docTop){
+    var portal = ensureMiniPortal();
+    var bar = ensureMiniBar();
+
+    configureFloatingDesktop();
+    if (bar.parentNode !== portal) portal.appendChild(bar);
+
+    portal.className = 'is-active' + (mode === 'fixed' ? ' is-fixed' : '');
+    portal.style.top = (mode === 'fixed') ? '0px' : (Math.round(docTop) + 'px');
+
+    MINI_PORTAL.mode = mode;
+    MINI_PORTAL.top = Math.round(docTop || 0);
+    MINI_PORTAL.lastY = currentScrollY();
+  }
+
+  function startDetachedApproach(){
+    activatePortal('approach', currentScrollY() - getMiniHeight());
+  }
+
+  function startDetachedFixed(){
+    activatePortal('fixed', 0);
+  }
+
+  function startDetachedExit(){
+    activatePortal('exit', currentScrollY());
+  }
+
+  function updateDetachedDesktop(headerBottom){
+    var y = currentScrollY();
+    var dy = y - MINI_PORTAL.lastY;
+    MINI_PORTAL.lastY = y;
+
+    if (y <= headerBottom){
+      ensureMiniHome();
+      return false;
+    }
+
+    if (Math.abs(dy) < 2){
+      return MINI_PORTAL.mode !== 'home';
+    }
+
+    if (MINI_PORTAL.mode === 'home'){
+      if (dy < 0){
+        startDetachedApproach();
+        return true;
+      }
+      return false;
+    }
+
+    if (MINI_PORTAL.mode === 'approach'){
+      if (y <= MINI_PORTAL.top){
+        startDetachedFixed();
+        return true;
+      }
+      if (dy > 0 && y >= MINI_PORTAL.top + getMiniHeight()){
+        ensureMiniHome();
+        return false;
+      }
+      return true;
+    }
+
+    if (MINI_PORTAL.mode === 'fixed'){
+      if (dy > 0){
+        startDetachedExit();
+      }
+      return true;
+    }
+
+    if (MINI_PORTAL.mode === 'exit'){
+      if (dy < 0 && y <= MINI_PORTAL.top){
+        startDetachedFixed();
+        return true;
+      }
+      if (y >= MINI_PORTAL.top + getMiniHeight()){
+        ensureMiniHome();
+        return false;
+      }
+      return true;
+    }
+
+    return false;
+  }
 
   /* ---------------- Hoist/restore ---------------- */
   var SLOT_REG = new Map();
@@ -365,11 +506,13 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
   function restoreHeaderToFull(){
     try { restoreAll(); } catch(_){}
     try {
+      var portal = doc.getElementById('llc-miniportal');
+      if (portal) { portal.className = ''; portal.style.top = '0px'; }
+      ensureMiniHome();
       var bar = doc.getElementById('llc-miniheader');
       if (bar) bar.classList.remove('is-stuck','has-sides');
       HTML.removeAttribute('data-llc-miniheader');
     } catch(_){}
-    try { resetMiniVisibility(); } catch(_){}
   }
 
   /* ---------------- Finders ---------------- */
@@ -504,7 +647,7 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
       raf = 0;
 
       if (!mq.matches){
-        // Mobile: painted from the start, hoist everything (no full nav)
+        // Mobile: keep existing behavior
         var group  = ensureMiniGroup();
         var bar    = group.bar;
         var header = markMainHeader();
@@ -517,17 +660,27 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
         bar.classList.add('is-stuck','has-sides');
         HTML.setAttribute('data-llc-miniheader','on');
         updateMiniHeightVar();
-        updateMiniVisibilityOnScroll(true);
         return;
       }
 
-      var activeDesktop = pastThreshold();
+      var y = currentScrollY();
+      var headerBottom = getHeaderDocBottom();
 
-      // Desktop: only content hoisting toggles now (bg already on miniheader)
-      if (activeDesktop) stickMiniDesktop();
-      else               stageMiniDesktop();
+      if (y > headerBottom){
+        if (updateDetachedDesktop(headerBottom)){
+          return;
+        }
+        // Below the header region and not detached: leave the miniheader home and hidden with the main header.
+        HTML.removeAttribute('data-llc-miniheader');
+        window.__LLC_V31__.desktopStuck = false;
+        return;
+      }
 
-      updateMiniVisibilityOnScroll(activeDesktop);
+      ensureMiniHome();
+
+      // Within the header region, keep existing staged/stuck behavior
+      if (pastThreshold()) stickMiniDesktop();
+      else                 stageMiniDesktop();
     }
 
     function scroll(){
@@ -546,9 +699,10 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
 
       computeCarrypad();
       restoreAll();
+      ensureMiniHome();
+      resetDetachedState();
       markMainHeader();
       stealAndPaintBgNow();
-      resetMiniVisibility();
       update();
     }
 
@@ -570,18 +724,18 @@ html[data-llc-home="1"] .📚19-10-1rI2oH .image__wrapper{display:none;}
     win.addEventListener('resize', function(){
       computeCarrypad();
       updateMiniHeightVar();
+      resetDetachedState();
       stealAndPaintBgNow();
-      resetMiniVisibility();
     }, { passive:true });
     win.addEventListener('orientationchange', function(){
       computeCarrypad();
       updateMiniHeightVar();
+      resetDetachedState();
       stealAndPaintBgNow();
-      resetMiniVisibility();
     }, { passive:true });
 
     // Initial run
-    resetMiniVisibility();
+    resetDetachedState();
     update();
   }
 
